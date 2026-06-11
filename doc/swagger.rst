@@ -1,12 +1,12 @@
 .. _swagger:
 
-Swagger documentation
+OpenAPI documentation
 =====================
 
 
 .. currentmodule:: flask_restx
 
-Swagger API documentation is automatically generated and available from your API's root URL.  You can configure the documentation using the :meth:`@api.doc() <Api.doc>` decorator.
+OpenAPI documentation is automatically generated and available from your API's root URL.  You can configure the documentation using the :meth:`@api.doc() <Api.doc>` decorator.
 
 
 Documenting with the ``@api.doc()`` decorator
@@ -33,9 +33,9 @@ Automatically documented models
 -------------------------------
 
 All models instantiated with :meth:`~Namespace.model`, :meth:`~Namespace.clone` and :meth:`~Namespace.inherit`
-will be automatically documented in your Swagger specifications.
+will be automatically documented in your OpenAPI specifications.
 
-The :meth:`~Namespace.inherit` method will register both the parent and the child in the Swagger models definitions:
+The :meth:`~Namespace.inherit` method will register both the parent and the child in the OpenAPI schemas:
 
 .. code-block:: python
 
@@ -48,7 +48,7 @@ The :meth:`~Namespace.inherit` method will register both the parent and the chil
         'extra': fields.String
     })
 
-The above configuration will produce these Swagger definitions:
+The above configuration will produce these OpenAPI schemas:
 
 .. code-block:: json
 
@@ -64,7 +64,7 @@ The above configuration will produce these Swagger definitions:
         "Child": {
             "allOf": [
                 {
-                    "$ref": "#/definitions/Parent"
+                    "$ref": "#/components/schemas/Parent"
                 }, {
                     "properties": {
                         "extra": {"type": "string"}
@@ -451,10 +451,10 @@ There are also field-specific attributes:
 Documenting the methods
 -----------------------
 
-Each resource will be documented as a Swagger path.
+Each resource will be documented as a OpenAPI path.
 
 Each resource method (``get``, ``post``, ``put``, ``delete``, ``path``, ``options``, ``head``)
-will be documented as a Swagger operation.
+will be documented as a OpenAPI operation.
 
 You can specify a unique Swagger ``operationId`` with the ``id`` keyword argument:
 
@@ -755,9 +755,9 @@ Documenting authorizations
 --------------------------
 
 You can use the ``authorizations`` keyword argument to document authorization information.
-See `Swagger Authentication documentation <https://swagger.io/docs/specification/2-0/authentication/>`_
+See `OpenAPI Authentication documentation <https://swagger.io/docs/specification/authentication/>`_
 for configuration details.
-- ``authorizations`` is a Python dictionary representation of the Swagger ``securityDefinitions`` configuration.
+- ``authorizations`` is a Python dictionary representation of the OpenAPI ``securitySchemes`` configuration.
 
 .. code-block:: python
 
@@ -867,10 +867,10 @@ It supports both extensions as `dict` or `kwargs` and perform automatique `x-` p
             return {}
 
 
-Export Swagger specifications
+Export OpenAPI specifications
 -----------------------------
 
-You can export the Swagger specifications for your API:
+You can export the OpenAPI specifications for your API:
 
 .. code-block:: python
 

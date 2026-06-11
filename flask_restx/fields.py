@@ -138,11 +138,11 @@ class Raw(object):
         values for this field during request payload validation.
     """
 
-    #: The JSON/Swagger schema type
+    #: The JSON/OpenAPI schema type
     __schema_type__ = "object"
-    #: The JSON/Swagger schema format
+    #: The JSON/OpenAPI schema format
     __schema_format__ = None
-    #: An optional JSON/Swagger schema example
+    #: An optional JSON/OpenAPI schema example
     __schema_example__ = None
 
     def __init__(
@@ -276,7 +276,7 @@ class Nested(Raw):
 
     def schema(self):
         schema = super(Nested, self).schema()
-        ref = "#/definitions/{0}".format(self.nested.name)
+        ref = "#/components/schemas/{0}".format(self.nested.name)
 
         if self.as_list:
             schema["type"] = "array"

@@ -849,21 +849,21 @@ class NestedFieldTest(FieldTestCase):
         nested_fields = api.model("NestedModel", {"name": fields.String})
         field = fields.Nested(nested_fields)
         assert not field.required
-        assert field.__schema__ == {"$ref": "#/definitions/NestedModel"}
+        assert field.__schema__ == {"$ref": "#/components/schemas/NestedModel"}
 
     def test_with_required(self, api):
         nested_fields = api.model("NestedModel", {"name": fields.String})
         field = fields.Nested(nested_fields, required=True)
         assert field.required
         assert not field.allow_null
-        assert field.__schema__ == {"$ref": "#/definitions/NestedModel"}
+        assert field.__schema__ == {"$ref": "#/components/schemas/NestedModel"}
 
     def test_with_description(self, api):
         nested_fields = api.model("NestedModel", {"name": fields.String})
         field = fields.Nested(nested_fields, description="A description")
         assert field.__schema__ == {
             "description": "A description",
-            "allOf": [{"$ref": "#/definitions/NestedModel"}],
+            "allOf": [{"$ref": "#/components/schemas/NestedModel"}],
         }
 
     def test_with_title(self, api):
@@ -871,7 +871,7 @@ class NestedFieldTest(FieldTestCase):
         field = fields.Nested(nested_fields, title="A title")
         assert field.__schema__ == {
             "title": "A title",
-            "allOf": [{"$ref": "#/definitions/NestedModel"}],
+            "allOf": [{"$ref": "#/components/schemas/NestedModel"}],
         }
 
     def test_with_allow_null(self, api):
@@ -879,7 +879,7 @@ class NestedFieldTest(FieldTestCase):
         field = fields.Nested(nested_fields, allow_null=True)
         assert not field.required
         assert field.allow_null
-        assert field.__schema__ == {"$ref": "#/definitions/NestedModel"}
+        assert field.__schema__ == {"$ref": "#/components/schemas/NestedModel"}
 
     def test_with_nullable_schema(self, api):
         nested_fields = api.model("NestedModel", {"name": fields.String})
@@ -887,7 +887,7 @@ class NestedFieldTest(FieldTestCase):
         # Should allow null in schema via anyOf
         assert field.__schema__ == {
             "anyOf": [
-                {"$ref": "#/definitions/NestedModel"},
+                {"$ref": "#/components/schemas/NestedModel"},
                 {"type": "null"},
             ]
         }
@@ -897,7 +897,7 @@ class NestedFieldTest(FieldTestCase):
         field = fields.Nested(nested_fields, skip_none=True)
         assert not field.required
         assert field.skip_none
-        assert field.__schema__ == {"$ref": "#/definitions/NestedModel"}
+        assert field.__schema__ == {"$ref": "#/components/schemas/NestedModel"}
 
     def test_with_readonly(self, app):
         api = Api(app)
@@ -905,7 +905,7 @@ class NestedFieldTest(FieldTestCase):
         field = fields.Nested(nested_fields, readonly=True)
         assert field.__schema__ == {
             "readOnly": True,
-            "allOf": [{"$ref": "#/definitions/NestedModel"}],
+            "allOf": [{"$ref": "#/components/schemas/NestedModel"}],
         }
 
     def test_as_list(self, api):
@@ -914,7 +914,7 @@ class NestedFieldTest(FieldTestCase):
         assert field.as_list
         assert field.__schema__ == {
             "type": "array",
-            "items": {"$ref": "#/definitions/NestedModel"},
+            "items": {"$ref": "#/components/schemas/NestedModel"},
         }
 
     def test_as_list_is_reusable(self, api):
@@ -923,11 +923,11 @@ class NestedFieldTest(FieldTestCase):
         field = fields.Nested(nested_fields, as_list=True)
         assert field.__schema__ == {
             "type": "array",
-            "items": {"$ref": "#/definitions/NestedModel"},
+            "items": {"$ref": "#/components/schemas/NestedModel"},
         }
 
         field = fields.Nested(nested_fields)
-        assert field.__schema__ == {"$ref": "#/definitions/NestedModel"}
+        assert field.__schema__ == {"$ref": "#/components/schemas/NestedModel"}
 
 
 class ListFieldTest(BaseFieldTestMixin, FieldTestCase):
@@ -943,7 +943,7 @@ class ListFieldTest(BaseFieldTestMixin, FieldTestCase):
         field = fields.List(fields.Nested(nested_fields))
         assert field.__schema__ == {
             "type": "array",
-            "items": {"$ref": "#/definitions/NestedModel"},
+            "items": {"$ref": "#/components/schemas/NestedModel"},
         }
 
         data = [{"name": "John Doe", "age": 42}, {"name": "Jane Doe", "age": 66}]

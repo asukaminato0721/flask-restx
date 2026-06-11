@@ -972,11 +972,11 @@ class SwaggerMaskHeaderTest(object):
         param = op["parameters"][0]
 
         assert param["name"] == "X-Fields"
-        assert param["type"] == "string"
-        assert param["format"] == "mask"
+        assert param["schema"]["type"] == "string"
+        assert param["schema"]["format"] == "mask"
         assert param["in"] == "header"
         assert "required" not in param
-        assert "default" not in param
+        assert "default" not in param["schema"]
 
     def test_marshal_with_expose_custom_mask_header(self, app, client):
         api = Api(app)
@@ -1082,9 +1082,9 @@ class SwaggerMaskHeaderTest(object):
         param = op["parameters"][0]
 
         assert param["name"] == "X-Fields"
-        assert param["type"] == "string"
-        assert param["format"] == "mask"
-        assert param["default"] == "{name,age}"
+        assert param["schema"]["type"] == "string"
+        assert param["schema"]["format"] == "mask"
+        assert param["schema"]["default"] == "{name,age}"
         assert param["in"] == "header"
         assert "required" not in param
 
@@ -1108,6 +1108,6 @@ class SwaggerMaskHeaderTest(object):
                 pass
 
         specs = client.get_specs()
-        definition = specs["definitions"]["Test"]
+        definition = specs["components"]["schemas"]["Test"]
         assert "x-mask" in definition
         assert definition["x-mask"] == "{name,age}"

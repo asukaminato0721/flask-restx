@@ -60,11 +60,11 @@ Usage
 By default, each time you use ``api.marshal`` or ``@api.marshal_with``,
 the mask will be automatically applied if the header is present.
 
-The header will be exposed as a Swagger parameter each time you use the
+The header will be exposed as a OpenAPI parameter each time you use the
 ``@api.marshal_with`` decorator.
 
 As Swagger does not permit exposing a global header once
-it can make your Swagger specifications a lot more verbose.
+it can make your OpenAPI specifications a lot more verbose.
 You can disable this behavior by setting ``RESTX_MASK_SWAGGER`` to ``False``.
 
 You can also specify a default mask that will be applied if no header mask is found.

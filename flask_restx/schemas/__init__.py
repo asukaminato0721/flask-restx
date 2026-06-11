@@ -81,12 +81,12 @@ class LazySchema(Mapping):
         return self._validator(self)
 
 
-#: OpenAPI 2.0 specification schema
-OAS_20 = LazySchema("oas-2.0.json")
+#: OpenAPI 3.0 specification schema
+OAS_30 = LazySchema("oas-3.0.json")
 
 #: Map supported OpenAPI versions to their JSON schema
 VERSIONS = {
-    "2.0": OAS_20,
+    "3.0.3": OAS_30,
 }
 
 
@@ -94,7 +94,7 @@ def validate(data):
     """
     Validate an OpenAPI specification.
 
-    Supported OpenAPI versions: 2.0
+    Supported OpenAPI versions: 3.0.x
 
     :param data dict: The specification to validate
     :returns boolean: True if the specification is valid
@@ -104,12 +104,16 @@ def validate(data):
 
     .. versionadded:: 0.12.1
     """
-    if "swagger" not in data:
+    if "openapi" not in data:
         raise errors.SpecsError("Unable to determinate OpenAPI schema version")
 
-    version = data["swagger"]
+    version = data["openapi"]
+    if version.startswith("3.0."):
+        version = "3.0.3"
     if version not in VERSIONS:
-        raise errors.SpecsError('Unknown OpenAPI schema version "{}"'.format(version))
+        raise errors.SpecsError(
+            'Unknown OpenAPI schema version "{}"'.format(data["openapi"])
+        )
 
     validator = VERSIONS[version].validator
 

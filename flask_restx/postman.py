@@ -18,7 +18,7 @@ DEFAULT_VARS = {
 
 
 class Request(object):
-    """Wraps a Swagger operation into a Postman Request"""
+    """Wraps an OpenAPI operation into a Postman Request"""
 
     def __init__(self, collection, path, params, method, operation):
         self.collection = collection
@@ -41,15 +41,14 @@ class Request(object):
         headers = {}
         # Handle content-type
         if self.method != "GET":
-            consumes = self.collection.api.__schema__.get("consumes", [])
-            consumes = self.operation.get("consumes", consumes)
-            if len(consumes):
-                headers["Content-Type"] = consumes[-1]
+            request_body = self.operation.get("requestBody", {})
+            content = request_body.get("content", {})
+            headers["Content-Type"] = next(reversed(content)) if content else "application/json"
 
         # Add all parameters headers
         for param in self.operation.get("parameters", []):
             if param["in"] == "header":
-                headers[param["name"]] = param.get("default", "")
+                headers[param["name"]] = self.default_for(param)
 
         # Add security headers if needed (global then local)
         for security in self.collection.api.__schema__.get("security", []):
@@ -63,6 +62,15 @@ class Request(object):
 
         lines = [":".join(line) for line in headers.items()]
         return "\n".join(lines)
+
+    def schema_for(self, param):
+        return param.get("schema", param)
+
+    def type_for(self, param):
+        return self.schema_for(param).get("type")
+
+    def default_for(self, param):
+        return param.get("default", self.schema_for(param).get("default", ""))
 
     @property
     def folder(self):
@@ -103,10 +111,10 @@ class Request(object):
         for name, param in params.items():
             if param["in"] == "path":
                 url = url.replace("{%s}" % name, ":%s" % name)
-                path_vars[name] = DEFAULT_VARS.get(param["type"], "")
+                path_vars[name] = DEFAULT_VARS.get(self.type_for(param), "")
             elif param["in"] == "query" and urlvars:
-                default = DEFAULT_VARS.get(param["type"], "")
-                url_vars[name] = param.get("default", default)
+                default = DEFAULT_VARS.get(self.type_for(param), "")
+                url_vars[name] = self.default_for(param) or default
         if url_vars:
             url = "?".join((url, urlencode(url_vars)))
         return url, path_vars
@@ -156,15 +164,15 @@ class PostmanCollectionV1(object):
     @property
     def requests(self):
         if self.swagger:
-            # First request is Swagger specifications
+            # First request is OpenAPI specifications
             yield Request(
                 self,
-                "/swagger.json",
+                "/" + self.api.default_swagger_filename,
                 {},
                 "get",
                 {
-                    "operationId": "Swagger specifications",
-                    "summary": "The API Swagger specifications as JSON",
+                    "operationId": "OpenAPI specifications",
+                    "summary": "The API OpenAPI specifications as JSON",
                 },
             )
         # Then iter over API paths and methods
@@ -182,9 +190,12 @@ class PostmanCollectionV1(object):
 
     @property
     def apikeys(self):
+        security_schemes = (
+            self.api.__schema__.get("components", {}).get("securitySchemes", {})
+        )
         return dict(
             (name, secdef["name"])
-            for name, secdef in self.api.__schema__.get("securityDefinitions").items()
+            for name, secdef in security_schemes.items()
             if secdef.get("in") == "header" and secdef.get("type") == "apiKey"
         )
 

@@ -38,8 +38,8 @@ class TestClient(FlaskClient):
         return json.loads(response.data.decode("utf8"))
 
     def get_specs(self, prefix="", status=200, **kwargs):
-        """Get a Swagger specification for a RESTX API"""
-        return self.get_json("{0}/swagger.json".format(prefix), status=status, **kwargs)
+        """Get an OpenAPI specification for a RESTX API"""
+        return self.get_json("{0}/openapi.json".format(prefix), status=status, **kwargs)
 
 
 @pytest.fixture

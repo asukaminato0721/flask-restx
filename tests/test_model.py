@@ -75,7 +75,7 @@ class ModelTest(object):
                 "age": {"type": "integer"},
                 "birthdate": {"type": "string", "format": "date-time"},
                 "address": {
-                    "$ref": "#/definitions/Address",
+                    "$ref": "#/components/schemas/Address",
                 },
             },
             "type": "object",
@@ -134,7 +134,7 @@ class ModelTest(object):
                 "addresses": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/Address",
+                        "$ref": "#/components/schemas/Address",
                     },
                 },
             },
@@ -193,7 +193,7 @@ class ModelTest(object):
                 "age": {"type": "integer"},
                 "birthdate": {"type": "string", "format": "date-time"},
                 "address": {
-                    "$ref": "#/definitions/Address",
+                    "$ref": "#/components/schemas/Address",
                 },
             },
             "type": "object",
@@ -432,7 +432,7 @@ class ModelTest(object):
         }
         assert child.__schema__ == {
             "allOf": [
-                {"$ref": "#/definitions/Parent"},
+                {"$ref": "#/components/schemas/Parent"},
                 {"properties": {"extra": {"type": "string"}}, "type": "object"},
             ]
         }
@@ -463,7 +463,7 @@ class ModelTest(object):
         }
         assert child.__schema__ == {
             "allOf": [
-                {"$ref": "#/definitions/Parent"},
+                {"$ref": "#/components/schemas/Parent"},
                 {"properties": {"extra": {"type": "string"}}, "type": "object"},
             ]
         }
@@ -495,8 +495,8 @@ class ModelTest(object):
 
         assert child.__schema__ == {
             "allOf": [
-                {"$ref": "#/definitions/GrandParent"},
-                {"$ref": "#/definitions/Parent"},
+                {"$ref": "#/components/schemas/GrandParent"},
+                {"$ref": "#/components/schemas/Parent"},
                 {"properties": {"extra": {"type": "string"}}, "type": "object"},
             ]
         }
@@ -527,8 +527,8 @@ class ModelTest(object):
 
         assert child.__schema__ == {
             "allOf": [
-                {"$ref": "#/definitions/GrandParent"},
-                {"$ref": "#/definitions/Parent"},
+                {"$ref": "#/components/schemas/GrandParent"},
+                {"$ref": "#/components/schemas/Parent"},
                 {"properties": {"extra": {"type": "string"}}, "type": "object"},
             ]
         }
@@ -590,7 +590,7 @@ class ModelTest(object):
         # Should use the common ancestor
         assert output.__schema__ == {
             "properties": {
-                "child": {"$ref": "#/definitions/Person"},
+                "child": {"$ref": "#/components/schemas/Person"},
             },
             "type": "object",
         }
@@ -637,7 +637,7 @@ class ModelSchemaTestCase(object):
                     "age": {"type": "integer"},
                     "birthdate": {"type": "string", "format": "date-time"},
                     "address": {
-                        "$ref": "#/definitions/Address",
+                        "$ref": "#/components/schemas/Address",
                     },
                 },
                 "type": "object",
@@ -651,7 +651,7 @@ class ModelSchemaTestCase(object):
                 "age": {"type": "integer"},
                 "birthdate": {"type": "string", "format": "date-time"},
                 "address": {
-                    "$ref": "#/definitions/Address",
+                    "$ref": "#/components/schemas/Address",
                 },
             },
             "type": "object",

@@ -193,7 +193,7 @@ You can also write your own:
             raise ValueError('This is not my type')
         return parse(value)
 
-    # Swagger documentation
+    # OpenAPI documentation
     my_type.__schema__ = {'type': 'string', 'format': 'my-custom-format'}
 
 

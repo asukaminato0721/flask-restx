@@ -10,7 +10,7 @@ To help you testing, you can export your API as a `Postman`_ collection.
     from myapp import api
 
     urlvars = False  # Build query strings in URLs
-    swagger = True  # Export Swagger specifications
+    swagger = True  # Export OpenAPI specifications
     data = api.as_postman(urlvars=urlvars, swagger=swagger)
     print(json.dumps(data))
 

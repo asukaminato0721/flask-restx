@@ -17,7 +17,7 @@ from ._http import HTTPStatus
 
 from urllib.parse import quote
 
-#: Maps Flask/Werkzeug rooting types to Swagger ones
+#: Maps Flask/Werkzeug routing types to OpenAPI schema types
 PATH_TYPES = {
     "int": "integer",
     "float": "number",
@@ -25,7 +25,7 @@ PATH_TYPES = {
     "default": "string",
 }
 
-#: Maps Python primitives types to Swagger ones
+#: Maps Python primitives types to OpenAPI schema types
 PY_TYPES = {
     int: "integer",
     float: "number",
@@ -60,9 +60,24 @@ RE_PARSE_RULE = re.compile(
 
 
 def ref(model):
-    """Return a reference to model in definitions"""
+    """Return a reference to model in components/schemas"""
     name = model.name if isinstance(model, ModelBase) else model
-    return {"$ref": "#/definitions/{0}".format(quote(name, safe=""))}
+    return {"$ref": "#/components/schemas/{0}".format(quote(name, safe=""))}
+
+
+def replace_refs(schema):
+    if isinstance(schema, dict):
+        return {
+            key: (
+                value.replace("#/definitions/", "#/components/schemas/")
+                if key == "$ref" and isinstance(value, str)
+                else replace_refs(value)
+            )
+            for key, value in schema.items()
+        }
+    elif isinstance(schema, list):
+        return [replace_refs(value) for value in schema]
+    return schema
 
 
 def _v(value):
@@ -112,7 +127,7 @@ def parse_rule(rule):
 
 def extract_path_params(path):
     """
-    Extract Flask-style parameters from an URL pattern as Swagger ones.
+    Extract Flask-style parameters from an URL pattern as OpenAPI ones.
     """
     params = OrderedDict()
     for converter, arguments, variable in parse_rule(path):
@@ -178,7 +193,7 @@ def parse_docstring(obj):
 
 def is_hidden(resource, route_doc=None):
     """
-    Determine whether a Resource has been hidden from Swagger documentation
+    Determine whether a Resource has been hidden from OpenAPI documentation
     i.e. by using Api.doc(False) decorator
     """
     if route_doc is False:
@@ -191,7 +206,7 @@ def build_request_body_parameters_schema(body_params):
     """
     :param body_params: List of JSON schema of body parameters.
     :type body_params: list of dict, generated from the json body parameters of a request parser
-    :return dict: The Swagger schema representation of the request body
+    :return dict: The OpenAPI schema representation of the request body
 
     :Example:
         {
@@ -216,17 +231,19 @@ def build_request_body_parameters_schema(body_params):
     for param in body_params:
         properties[param["name"]] = {"type": param.get("type", "string")}
 
+    required = [param["name"] for param in body_params if param.get("required")]
+    schema = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = sorted(required)
     return {
-        "name": "payload",
         "required": True,
-        "in": "body",
-        "schema": {"type": "object", "properties": properties},
+        "content": {"application/json": {"schema": schema}},
     }
 
 
 class Swagger(object):
     """
-    A Swagger documentation wrapper for an API instance.
+    An OpenAPI documentation wrapper for an API instance.
     """
 
     def __init__(self, api):
@@ -237,7 +254,7 @@ class Swagger(object):
         """
         Output the specification as a serializable ``dict``.
 
-        :returns: the full Swagger specification in a serializable format
+        :returns: the full OpenAPI specification in a serializable format
         :rtype: dict
         """
         basepath = self.api.base_path
@@ -292,26 +309,32 @@ class Swagger(object):
                 )
 
         specs = {
-            "swagger": "2.0",
-            "basePath": basepath,
+            "openapi": "3.0.3",
             "paths": not_none_sorted(paths),
             "info": infos,
-            "produces": list(self.api.representations.keys()),
-            "consumes": ["application/json"],
-            "securityDefinitions": self.api.authorizations or None,
+            "servers": self.servers_for(basepath),
             "security": self.security_requirements(self.api.security) or None,
             "tags": tags,
-            "definitions": self.serialize_definitions() or None,
-            "responses": responses or None,
-            "host": self.get_host(),
+            "components": self.components_for(
+                self.serialize_definitions(),
+                responses,
+                self.api.authorizations,
+            ),
         }
         return not_none(specs)
 
-    def get_host(self):
-        hostname = current_app.config.get("SERVER_NAME", None) or None
-        if hostname and self.api.blueprint and self.api.blueprint.subdomain:
-            hostname = ".".join((self.api.blueprint.subdomain, hostname))
-        return hostname
+    def servers_for(self, basepath):
+        return [{"url": basepath or "/"}]
+
+    def components_for(self, schemas, responses, security_schemes):
+        return not_none(
+            {
+                "schemas": schemas or None,
+                "responses": responses or None,
+                "securitySchemes": self.serialize_security_schemes(security_schemes)
+                or None,
+            }
+        )
 
     def extract_tags(self, api):
         tags = []
@@ -331,7 +354,7 @@ class Swagger(object):
             # hide namespaces without any Resources
             if not ns.resources:
                 continue
-            # hide namespaces with all Resources hidden from Swagger documentation
+            # hide namespaces with all Resources hidden from OpenAPI documentation
             if all(is_hidden(r.resource, route_doc=r.route_doc) for r in ns.resources):
                 continue
             if ns.name not in by_name:
@@ -353,7 +376,7 @@ class Swagger(object):
             return False
 
         # ensure unique names for multiple routes to the same resource
-        # provides different Swagger operationId's
+        # provides different OpenAPI operationId's
         doc["name"] = (
             "{}_{}".format(resource.__name__, url) if route_doc else resource.__name__
         )
@@ -421,16 +444,16 @@ class Swagger(object):
 
                 body_params = [p for p in expect.__schema__ if p["in"] == "body"]
                 if body_params:
-                    params["payload"] = build_request_body_parameters_schema(
-                        body_params
-                    )
+                    params["payload"] = build_request_body_parameters_schema(body_params)
             elif isinstance(expect, ModelBase):
                 params["payload"] = not_none(
                     {
-                        "name": "payload",
                         "required": True,
-                        "in": "body",
-                        "schema": self.serialize_schema(expect),
+                        "content": {
+                            "application/json": {
+                                "schema": self.serialize_schema(expect),
+                            }
+                        },
                     }
                 )
             elif isinstance(expect, (list, tuple)):
@@ -439,20 +462,24 @@ class Swagger(object):
                     model, description = expect
                     params["payload"] = not_none(
                         {
-                            "name": "payload",
                             "required": True,
-                            "in": "body",
-                            "schema": self.serialize_schema(model),
                             "description": description,
+                            "content": {
+                                "application/json": {
+                                    "schema": self.serialize_schema(model),
+                                }
+                            },
                         }
                     )
                 else:
                     params["payload"] = not_none(
                         {
-                            "name": "payload",
                             "required": True,
-                            "in": "body",
-                            "schema": self.serialize_schema(expect),
+                            "content": {
+                                "application/json": {
+                                    "schema": self.serialize_schema(expect),
+                                }
+                            },
                         }
                     )
         return params
@@ -466,7 +493,7 @@ class Swagger(object):
             self.process_headers(response, apidoc)
             if "responses" in apidoc:
                 _, model, _ = list(apidoc["responses"].values())[0]
-                response["schema"] = self.serialize_schema(model)
+                self.set_response_schema(response, self.serialize_schema(model))
             responses[exception.__name__] = not_none(response)
         return responses
 
@@ -474,41 +501,30 @@ class Swagger(object):
         doc = self.extract_resource_doc(resource, url, route_doc=route_doc)
         if doc is False:
             return
-        path = {"parameters": self.parameters_for(doc) or None}
+        path_params, path_request_body = self.parameters_and_request_body_for(doc)
+        path = {"parameters": path_params or None}
         for method in [m.lower() for m in resource.methods or []]:
             methods = [m.lower() for m in kwargs.get("methods", [])]
             if doc[method] is False or methods and method not in methods:
                 continue
-            path[method] = self.serialize_operation(doc, method)
+            path[method] = self.serialize_operation(doc, method, path_request_body)
             path[method]["tags"] = [ns.name]
         return not_none(path)
 
-    def serialize_operation(self, doc, method):
+    def serialize_operation(self, doc, method, inherited_request_body=None):
+        parameters, request_body = self.parameters_and_request_body_for(doc[method])
         operation = {
             "responses": self.responses_for(doc, method) or None,
             "summary": doc[method]["docstring"]["summary"],
             "description": self.description_for(doc, method) or None,
             "operationId": self.operation_id_for(doc, method),
-            "parameters": self.parameters_for(doc[method]) or None,
+            "parameters": parameters or None,
+            "requestBody": request_body or inherited_request_body,
             "security": self.security_for(doc, method),
         }
-        # Handle 'produces' mimetypes documentation
-        if "produces" in doc[method]:
-            operation["produces"] = doc[method]["produces"]
         # Handle deprecated annotation
         if doc.get("deprecated") or doc[method].get("deprecated"):
             operation["deprecated"] = True
-        # Handle form exceptions:
-        doc_params = list(doc.get("params", {}).values())
-        all_params = doc_params + (operation["parameters"] or [])
-        if all_params and any(p["in"] == "formData" for p in all_params):
-            if any(p["type"] == "file" for p in all_params):
-                operation["consumes"] = ["multipart/form-data"]
-            else:
-                operation["consumes"] = [
-                    "application/x-www-form-urlencoded",
-                    "multipart/form-data",
-                ]
         operation.update(self.vendor_fields(doc, method))
         return not_none(operation)
 
@@ -543,10 +559,53 @@ class Swagger(object):
             else self.api.default_id(doc["name"], method)
         )
 
+    def parameters_and_request_body_for(self, doc):
+        params = self.parameters_for(doc)
+        request_bodies = [param for param in params if "content" in param]
+        form_params = [param for param in params if param.get("in") == "formData"]
+        params = [
+            param
+            for param in params
+            if "content" not in param and param.get("in") != "formData"
+        ]
+        if request_bodies and form_params:
+            raise ValueError("Can't use formData and body at the same time")
+        request_body = None
+        if request_bodies:
+            request_body = request_bodies[-1]
+        elif form_params:
+            request_body = self.request_body_from_form_params(form_params)
+        return params, request_body
+
+    def request_body_from_form_params(self, params):
+        properties = {}
+        required = []
+        has_file = False
+        for param in params:
+            schema = self.schema_from_parameter(param)
+            if schema.get("type") == "file":
+                schema = {"type": "string", "format": "binary"}
+                has_file = True
+            properties[param["name"]] = schema
+            if param.get("required"):
+                required.append(param["name"])
+        schema = {"type": "object", "properties": properties}
+        if required:
+            schema["required"] = sorted(required)
+        mimetype = "multipart/form-data" if has_file else "application/x-www-form-urlencoded"
+        return {
+            "required": any(param.get("required") for param in params),
+            "content": {mimetype: {"schema": schema}},
+        }
+
     def parameters_for(self, doc):
         params = []
         for name, param in doc["params"].items():
+            param = param.copy()
             param["name"] = name
+            if "content" in param:
+                params.append(param)
+                continue
             if "type" not in param and "schema" not in param:
                 param["type"] = "string"
             if "in" not in param:
@@ -562,7 +621,22 @@ class Swagger(object):
                 elif isinstance(ptype, (type, type(None))) and ptype in PY_TYPES:
                     param["type"] = PY_TYPES[ptype]
 
-            params.append(param)
+            if param["in"] == "body":
+                params.append(
+                    {
+                        "required": param.get("required", False),
+                        "description": param.get("description"),
+                        "content": {
+                            "application/json": {
+                                "schema": replace_refs(param.get("schema", {}))
+                            }
+                        },
+                    }
+                )
+            elif param["in"] == "formData":
+                params.append(param)
+            else:
+                params.append(self.openapi_parameter(param))
 
         # Handle fields mask
         mask = doc.get("__mask__")
@@ -570,15 +644,59 @@ class Swagger(object):
             param = {
                 "name": current_app.config["RESTX_MASK_HEADER"],
                 "in": "header",
-                "type": "string",
-                "format": "mask",
+                "schema": {"type": "string", "format": "mask"},
                 "description": "An optional fields mask",
             }
             if isinstance(mask, str):
-                param["default"] = mask
+                param["schema"]["default"] = mask
             params.append(param)
 
         return params
+
+    def openapi_parameter(self, param):
+        schema = self.schema_from_parameter(param)
+        out = {
+            "name": param["name"],
+            "in": param["in"],
+            "description": param.get("description"),
+            "required": param.get("required") if param["in"] != "path" else True,
+            "schema": schema,
+        }
+        if schema.get("type") == "array":
+            collection_format = param.get("collectionFormat")
+            if collection_format == "multi":
+                out["style"] = "form"
+                out["explode"] = True
+            elif collection_format == "csv":
+                out["style"] = "form"
+                out["explode"] = False
+        for key in ("style", "explode", "allowReserved", "deprecated", "example", "examples"):
+            if key in param:
+                out[key] = param[key]
+        return not_none(out)
+
+    def schema_from_parameter(self, param):
+        if "schema" in param:
+            return replace_refs(param["schema"])
+        schema_keys = {
+            "type",
+            "format",
+            "items",
+            "default",
+            "maximum",
+            "exclusiveMaximum",
+            "minimum",
+            "exclusiveMinimum",
+            "maxLength",
+            "minLength",
+            "pattern",
+            "maxItems",
+            "minItems",
+            "uniqueItems",
+            "enum",
+            "multipleOf",
+        }
+        return replace_refs(not_none({key: param.get(key) for key in schema_keys}))
 
     def responses_for(self, doc, method):
         # TODO: simplify/refactor responses/model handling
@@ -609,7 +727,11 @@ class Swagger(object):
                         envelope = kwargs.get("envelope")
                         if envelope:
                             schema = {"properties": {envelope: schema}}
-                        responses[code]["schema"] = schema
+                        self.set_response_schema(
+                            responses[code],
+                            schema,
+                            self.produces_for(doc, method),
+                        )
                     self.process_headers(
                         responses[code], doc, method, kwargs.get("headers")
                     )
@@ -619,7 +741,11 @@ class Swagger(object):
                     responses[code] = self.process_headers(
                         DEFAULT_RESPONSE.copy(), doc, method
                     )
-                responses[code]["schema"] = self.serialize_schema(d["model"])
+                self.set_response_schema(
+                    responses[code],
+                    self.serialize_schema(d["model"]),
+                    self.produces_for(doc, method),
+                )
 
             if "docstring" in d:
                 for name, description in d["docstring"]["raises"].items():
@@ -633,20 +759,36 @@ class Swagger(object):
                             else None
                         )
                         if code and exception.__name__ == name:
-                            responses[code] = {"$ref": "#/responses/{0}".format(name)}
+                            responses[code] = {
+                                "$ref": "#/components/responses/{0}".format(name)
+                            }
                             break
 
         if not responses:
             responses[str(HTTPStatus.OK.value)] = self.process_headers(
                 DEFAULT_RESPONSE.copy(), doc, method
             )
+        produces = self.produces_for(doc, method)
+        if "produces" in doc.get(method, {}):
+            for response in responses.values():
+                if "content" not in response:
+                    response["content"] = {mimetype: {} for mimetype in produces}
         return responses
+
+    def produces_for(self, doc, method):
+        return doc.get(method, {}).get("produces") or list(self.api.representations.keys())
+
+    def set_response_schema(self, response, schema, mimetypes=None):
+        mimetypes = mimetypes or list(self.api.representations.keys())
+        response["content"] = {
+            mimetype: {"schema": replace_refs(schema)} for mimetype in mimetypes
+        }
 
     def process_headers(self, response, doc, method=None, headers=None):
         method_doc = doc.get(method, {})
         if "headers" in doc or "headers" in method_doc or headers:
             response["headers"] = dict(
-                (k, _clean_header(v))
+                (k, self.openapi_header(v))
                 for k, v in itertools.chain(
                     doc.get("headers", {}).items(),
                     method_doc.get("headers", {}).items(),
@@ -655,9 +797,20 @@ class Swagger(object):
             )
         return response
 
+    def openapi_header(self, header):
+        header = _clean_header(header)
+        schema = self.schema_from_parameter(header)
+        return not_none(
+            {
+                "description": header.get("description"),
+                "schema": schema,
+            }
+        )
+
     def serialize_definitions(self):
         return dict(
-            (name, model.__schema__) for name, model in self._registered_models.items()
+            (name, replace_refs(model.__schema__))
+            for name, model in self._registered_models.items()
         )
 
     def serialize_schema(self, model):
@@ -686,6 +839,41 @@ class Swagger(object):
             return {"type": PY_TYPES[model]}
 
         raise ValueError("Model {0} not registered".format(model))
+
+    def serialize_security_schemes(self, security_schemes):
+        if not security_schemes:
+            return None
+        return {
+            name: self.serialize_security_scheme(scheme)
+            for name, scheme in security_schemes.items()
+        }
+
+    def serialize_security_scheme(self, scheme):
+        scheme = scheme.copy()
+        scheme_type = scheme.get("type")
+        if scheme_type == "basic":
+            scheme["type"] = "http"
+            scheme["scheme"] = "basic"
+            return scheme
+        if scheme_type == "oauth2":
+            flow = scheme.pop("flow", None)
+            if not flow:
+                return scheme
+            flow_names = {
+                "accessCode": "authorizationCode",
+                "application": "clientCredentials",
+            }
+            openapi_flow = flow_names.get(flow, flow)
+            flow_data = not_none(
+                {
+                    "authorizationUrl": scheme.pop("authorizationUrl", None),
+                    "tokenUrl": scheme.pop("tokenUrl", None),
+                    "refreshUrl": scheme.pop("refreshUrl", None),
+                    "scopes": scheme.pop("scopes", {}),
+                }
+            )
+            scheme["flows"] = {openapi_flow: flow_data}
+        return scheme
 
     def register_model(self, model):
         name = model.name if isinstance(model, ModelBase) else model

@@ -7,23 +7,23 @@ from flask_restx import errors, schemas
 
 class SchemasTest:
     def test_lazyness(self):
-        schema = schemas.LazySchema("oas-2.0.json")
+        schema = schemas.LazySchema("oas-3.0.json")
         assert schema._schema is None
 
         "" in schema  # Trigger load
         assert schema._schema is not None
         assert isinstance(schema._schema, dict)
 
-    def test_oas2_schema_is_present(self):
-        assert hasattr(schemas, "OAS_20")
-        assert isinstance(schemas.OAS_20, schemas.LazySchema)
+    def test_oas3_schema_is_present(self):
+        assert hasattr(schemas, "OAS_30")
+        assert isinstance(schemas.OAS_30, schemas.LazySchema)
 
 
 class ValidationTest:
-    def test_oas_20_valid(self):
+    def test_oas_30_valid(self):
         assert schemas.validate(
             {
-                "swagger": "2.0",
+                "openapi": "3.0.3",
                 "info": {
                     "title": "An empty minimal specification",
                     "version": "1.0",
@@ -32,11 +32,11 @@ class ValidationTest:
             }
         )
 
-    def test_oas_20_invalid(self):
+    def test_oas_30_invalid(self):
         with pytest.raises(schemas.SchemaValidationError) as excinfo:
             schemas.validate(
                 {
-                    "swagger": "2.0",
+                    "openapi": "3.0.3",
                     "should": "not be here",
                 }
             )
@@ -49,4 +49,4 @@ class ValidationTest:
 
     def test_unknown_version(self):
         with pytest.raises(errors.SpecsError):
-            schemas.validate({"swagger": "42.0"})
+            schemas.validate({"openapi": "2.0"})

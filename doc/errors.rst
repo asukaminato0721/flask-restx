@@ -170,7 +170,7 @@ that you can do with Flask/Blueprint :meth:`@errorhandler <flask:flask.Flask.err
 
 .. note ::
 
-    A "NoResultFound" error with description is required by the OpenAPI 2.0 spec. The docstring in the error handle function is output in the swagger.json as the description.
+    A "NoResultFound" error with description is required by the OpenAPI spec. The docstring in the error handler function is output in the OpenAPI document as the description.
 
 You can also document the error:
 

@@ -689,20 +689,25 @@ class ErrorsTest(object):
 
         specs = client.get_specs()
 
-        assert "Error" in specs["definitions"]
-        assert "CustomException" in specs["responses"]
+        assert "Error" in specs["components"]["schemas"]
+        assert "CustomException" in specs["components"]["responses"]
 
-        response = specs["responses"]["CustomException"]
+        response = specs["components"]["responses"]["CustomException"]
         assert response["description"] == "Some description"
-        assert response["schema"] == {"$ref": "#/definitions/Error"}
+        assert response["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/Error"
+        }
         assert response["headers"] == {
-            "Custom-Header": {"description": "Some custom header", "type": "string"}
+            "Custom-Header": {
+                "description": "Some custom header",
+                "schema": {"type": "string"},
+            }
         }
 
         operation = specs["paths"]["/test/"]["get"]
         assert "responses" in operation
         assert operation["responses"] == {
-            "503": {"$ref": "#/responses/CustomException"}
+            "503": {"$ref": "#/components/responses/CustomException"}
         }
 
     def test_errorhandler_with_propagate_true(self, app, client):

@@ -10,23 +10,63 @@ import flask_restx as restx
 from flask_restx import inputs
 
 
+def schemas(spec):
+    return spec["components"]["schemas"]
+
+
+def security_schemes(spec):
+    return spec["components"]["securitySchemes"]
+
+
+def response_schema(response, mimetype="application/json"):
+    return response["content"][mimetype]["schema"]
+
+
+def response_with_schema(description, schema, mimetype="application/json"):
+    return {
+        "description": description,
+        "content": {mimetype: {"schema": schema}},
+    }
+
+
+def request_body_schema(operation, mimetype="application/json"):
+    return operation["requestBody"]["content"][mimetype]["schema"]
+
+
+def parameter_schema(parameter):
+    return parameter["schema"]
+
+
+def oauth2_scheme(flow, token_url, scopes):
+    flow_names = {"accessCode": "authorizationCode", "application": "clientCredentials"}
+    return {
+        "type": "oauth2",
+        "flows": {
+            flow_names.get(flow, flow): {
+                "tokenUrl": token_url,
+                "scopes": scopes,
+            }
+        },
+    }
+
+
 class SwaggerTest(object):
     def test_specs_endpoint(self, api, client):
         data = client.get_specs("")
-        assert data["swagger"] == "2.0"
-        assert data["basePath"] == "/"
-        assert data["produces"] == ["application/json"]
-        assert data["consumes"] == ["application/json"]
+        assert data["openapi"] == "3.0.3"
+        assert data["servers"] == [{"url": "/"}]
+        assert "produces" not in data
+        assert "consumes" not in data
         assert data["paths"] == {}
         assert "info" in data
 
     @pytest.mark.api(prefix="/api")
     def test_specs_endpoint_with_prefix(self, api, client):
         data = client.get_specs("/api")
-        assert data["swagger"] == "2.0"
-        assert data["basePath"] == "/api"
-        assert data["produces"] == ["application/json"]
-        assert data["consumes"] == ["application/json"]
+        assert data["openapi"] == "3.0.3"
+        assert data["servers"] == [{"url": "/api"}]
+        assert "produces" not in data
+        assert "consumes" not in data
         assert data["paths"] == {}
         assert "info" in data
 
@@ -37,9 +77,7 @@ class SwaggerTest(object):
         api.representations["application/xml"] = output_xml
 
         data = client.get_specs()
-        assert len(data["produces"]) == 2
-        assert "application/json" in data["produces"]
-        assert "application/xml" in data["produces"]
+        assert "produces" not in data
 
     def test_specs_endpoint_info(self, app, client):
         api = restx.Api(
@@ -56,9 +94,8 @@ class SwaggerTest(object):
         api.init_app(app)
 
         data = client.get_specs()
-        assert data["swagger"] == "2.0"
-        assert data["basePath"] == "/"
-        assert data["produces"] == ["application/json"]
+        assert data["openapi"] == "3.0.3"
+        assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
         assert "info" in data
@@ -92,9 +129,8 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert data["swagger"] == "2.0"
-        assert data["basePath"] == "/"
-        assert data["produces"] == ["application/json"]
+        assert data["openapi"] == "3.0.3"
+        assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
         assert "info" in data
@@ -127,9 +163,8 @@ class SwaggerTest(object):
         api.init_app(app)
 
         data = client.get_specs()
-        assert data["swagger"] == "2.0"
-        assert data["basePath"] == "/"
-        assert data["produces"] == ["application/json"]
+        assert data["openapi"] == "3.0.3"
+        assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
         assert "info" in data
@@ -152,7 +187,8 @@ class SwaggerTest(object):
 
         data = client.get_specs("")
         assert "host" not in data
-        assert data["basePath"] == "/"
+        assert "basePath" not in data
+        assert data["servers"] == [{"url": "/"}]
 
     @pytest.mark.options(server_name="api.restx.org")
     def test_specs_endpoint_host(self, app, client):
@@ -160,8 +196,9 @@ class SwaggerTest(object):
         restx.Api(app)
 
         data = client.get_specs("")
-        assert data["host"] == "api.restx.org"
-        assert data["basePath"] == "/"
+        assert "host" not in data
+        assert "basePath" not in data
+        assert data["servers"] == [{"url": "/"}]
 
     @pytest.mark.options(server_name="api.restx.org")
     def test_specs_endpoint_host_with_url_prefix(self, app, client):
@@ -170,8 +207,9 @@ class SwaggerTest(object):
         app.register_blueprint(blueprint)
 
         data = client.get_specs("/api/1")
-        assert data["host"] == "api.restx.org"
-        assert data["basePath"] == "/api/1"
+        assert "host" not in data
+        assert "basePath" not in data
+        assert data["servers"] == [{"url": "/api/1"}]
 
     @pytest.mark.options(server_name="restx.org")
     def test_specs_endpoint_host_and_subdomain(self, app, client):
@@ -180,8 +218,9 @@ class SwaggerTest(object):
         app.register_blueprint(blueprint)
 
         data = client.get_specs(base_url="http://api.restx.org")
-        assert data["host"] == "api.restx.org"
-        assert data["basePath"] == "/"
+        assert "host" not in data
+        assert "basePath" not in data
+        assert data["servers"] == [{"url": "/"}]
 
     def test_specs_endpoint_tags_short(self, app, client):
         restx.Api(app, tags=["tag-1", "tag-2", "tag-3"])
@@ -323,8 +362,8 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "securityDefinitions" in data
-        assert data["securityDefinitions"] == authorizations
+        assert "securitySchemes" in data.get("components", {})
+        assert security_schemes(data) == authorizations
 
     @pytest.mark.api(prefix="/api")
     def test_minimal_documentation(self, api, client):
@@ -529,7 +568,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "id"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
 
@@ -547,7 +586,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
 
@@ -565,7 +604,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "id"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
 
@@ -587,7 +626,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -607,7 +646,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -627,19 +666,17 @@ class SwaggerTest(object):
         assert "/with-parser/" in data["paths"]
 
         op = data["paths"]["/with-parser/"]["get"]
-        assert len(op["parameters"]) == 2
+        assert len(op["parameters"]) == 1
 
         parameter = [o for o in op["parameters"] if o["in"] == "query"][0]
         assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Some param"
 
-        parameter = [o for o in op["parameters"] if o["in"] == "body"][0]
-        assert parameter["name"] == "payload"
-        assert parameter["required"]
-        assert parameter["in"] == "body"
-        assert parameter["schema"]["properties"]["jsonparam"]["type"] == "string"
+        assert op["requestBody"]["required"]
+        schema = request_body_schema(op)
+        assert schema["properties"]["jsonparam"]["type"] == "string"
 
     def test_expect_parser_on_class(self, api, client):
         parser = api.parser()
@@ -659,7 +696,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Some param"
 
@@ -684,7 +721,7 @@ class SwaggerTest(object):
 
         parameter = op["parameters"][0]
         assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Some param"
 
@@ -710,7 +747,7 @@ class SwaggerTest(object):
 
         parameter = op["parameters"][0]
         assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "query"
         assert parameter["description"] == "New description"
 
@@ -728,18 +765,11 @@ class SwaggerTest(object):
         assert "/with-parser/" in data["paths"]
 
         op = data["paths"]["/with-parser/"]["get"]
-        assert len(op["parameters"]) == 1
+        assert "parameters" not in op
 
-        parameter = op["parameters"][0]
-        assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
-        assert parameter["in"] == "formData"
-        assert parameter["description"] == "Some param"
-
-        assert op["consumes"] == [
-            "application/x-www-form-urlencoded",
-            "multipart/form-data",
-        ]
+        schema = request_body_schema(op, "application/x-www-form-urlencoded")
+        assert schema["properties"]["param"]["type"] == "integer"
+        assert op["requestBody"]["required"] is False
 
     def test_parser_parameter_in_files(self, api, client):
         parser = api.parser()
@@ -755,14 +785,13 @@ class SwaggerTest(object):
         assert "/with-parser/" in data["paths"]
 
         op = data["paths"]["/with-parser/"]["get"]
-        assert len(op["parameters"]) == 1
+        assert "parameters" not in op
 
-        parameter = op["parameters"][0]
-        assert parameter["name"] == "in_files"
-        assert parameter["type"] == "file"
-        assert parameter["in"] == "formData"
-
-        assert op["consumes"] == ["multipart/form-data"]
+        schema = request_body_schema(op, "multipart/form-data")
+        assert schema["properties"]["in_files"] == {
+            "type": "string",
+            "format": "binary",
+        }
 
     def test_parser_parameter_in_files_on_class(self, api, client):
         parser = api.parser()
@@ -778,18 +807,16 @@ class SwaggerTest(object):
         assert "/with-parser/" in data["paths"]
 
         path = data["paths"]["/with-parser/"]
-        assert len(path["parameters"]) == 1
+        assert "parameters" not in path
 
-        parameter = path["parameters"][0]
-        assert parameter["name"] == "in_files"
-        assert parameter["type"] == "file"
-        assert parameter["in"] == "formData"
-
-        assert "consumes" not in path
+        assert "requestBody" not in path
 
         op = path["get"]
-        assert "consumes" in op
-        assert op["consumes"] == ["multipart/form-data"]
+        schema = request_body_schema(op, "multipart/form-data")
+        assert schema["properties"]["in_files"] == {
+            "type": "string",
+            "format": "binary",
+        }
 
     def test_explicit_parameters(self, api, client):
         @api.route("/name/<int:age>/", endpoint="by-name")
@@ -814,7 +841,7 @@ class SwaggerTest(object):
 
         parameter = path["parameters"][0]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
 
@@ -823,7 +850,7 @@ class SwaggerTest(object):
 
         parameter = op["parameters"][0]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -838,13 +865,10 @@ class SwaggerTest(object):
         assert "/name/" in data["paths"]
 
         op = data["paths"]["/name/"]["get"]
-        assert len(op["parameters"]) == 1
+        assert "parameters" not in op
 
-        parameter = op["parameters"][0]
-        assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
-        assert parameter["in"] == "formData"
-        assert parameter["description"] == "A query string"
+        schema = request_body_schema(op, "application/x-www-form-urlencoded")
+        assert schema["properties"]["q"]["type"] == "string"
 
     def test_class_explicit_parameters(self, api, client):
         @api.route(
@@ -874,13 +898,13 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
 
         parameter = by_name["q"]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -917,7 +941,7 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -930,7 +954,7 @@ class SwaggerTest(object):
 
         parameter = get["parameters"][0]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -939,7 +963,7 @@ class SwaggerTest(object):
 
         parameter = post["parameters"][0]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Overriden description"
 
@@ -981,14 +1005,14 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "Overriden"
 
         parameter = by_name["q"]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -999,7 +1023,7 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -1079,14 +1103,14 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "Overriden"
 
         parameter = by_name["q"]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -1097,7 +1121,7 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -1152,19 +1176,19 @@ class SwaggerTest(object):
 
         parameters = dict((p["name"], p) for p in op["parameters"])
 
-        assert parameters["int"]["type"] == "integer"
-        assert parameters["float"]["type"] == "number"
-        assert parameters["str"]["type"] == "string"
-        assert parameters["bool"]["type"] == "boolean"
+        assert parameter_schema(parameters["int"])["type"] == "integer"
+        assert parameter_schema(parameters["float"])["type"] == "number"
+        assert parameter_schema(parameters["str"])["type"] == "string"
+        assert parameter_schema(parameters["bool"])["type"] == "boolean"
 
-        assert parameters["int-array"]["type"] == "array"
-        assert parameters["int-array"]["items"]["type"] == "integer"
-        assert parameters["float-array"]["type"] == "array"
-        assert parameters["float-array"]["items"]["type"] == "number"
-        assert parameters["str-array"]["type"] == "array"
-        assert parameters["str-array"]["items"]["type"] == "string"
-        assert parameters["bool-array"]["type"] == "array"
-        assert parameters["bool-array"]["items"]["type"] == "boolean"
+        assert parameter_schema(parameters["int-array"])["type"] == "array"
+        assert parameter_schema(parameters["int-array"])["items"]["type"] == "integer"
+        assert parameter_schema(parameters["float-array"])["type"] == "array"
+        assert parameter_schema(parameters["float-array"])["items"]["type"] == "number"
+        assert parameter_schema(parameters["str-array"])["type"] == "array"
+        assert parameter_schema(parameters["str-array"])["items"]["type"] == "string"
+        assert parameter_schema(parameters["bool-array"])["type"] == "array"
+        assert parameter_schema(parameters["bool-array"])["items"]["type"] == "boolean"
 
     def test_response_on_method(self, api, client):
         api.model(
@@ -1195,16 +1219,13 @@ class SwaggerTest(object):
             "404": {
                 "description": "Not found",
             },
-            "405": {
-                "description": "Some message",
-                "schema": {
-                    "$ref": "#/definitions/ErrorModel",
-                },
-            },
+            "405": response_with_schema(
+                "Some message", {"$ref": "#/components/schemas/ErrorModel"}
+            ),
         }
 
-        assert "definitions" in data
-        assert "ErrorModel" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "ErrorModel" in schemas(data)
 
     def test_api_response(self, api, client):
         @api.route("/test/")
@@ -1263,15 +1284,12 @@ class SwaggerTest(object):
 
         op = paths["/test/"]["get"]
         assert op["responses"] == {
-            "200": {
-                "description": "Success",
-                "schema": {
-                    "$ref": "#/definitions/SomeModel",
-                },
-            }
+            "200": response_with_schema(
+                "Success", {"$ref": "#/components/schemas/SomeModel"}
+            )
         }
 
-        assert "SomeModel" in data["definitions"]
+        assert "SomeModel" in schemas(data)
 
     def test_api_response_default(self, api, client):
         @api.route("/test/")
@@ -1307,23 +1325,21 @@ class SwaggerTest(object):
 
         assert "X-HEADER" in headers
         assert headers["X-HEADER"] == {
-            "type": "string",
             "description": "A class header",
+            "schema": {"type": "string"},
         }
 
         assert "X-HEADER-2" in headers
         assert headers["X-HEADER-2"] == {
-            "type": "array",
-            "items": {"type": "integer"},
             "description": "Another header",
-            "collectionFormat": "csv",
+            "schema": {"type": "array", "items": {"type": "integer"}},
         }
 
         assert "X-HEADER-3" in headers
-        assert headers["X-HEADER-3"] == {"type": "integer"}
+        assert headers["X-HEADER-3"] == {"schema": {"type": "integer"}}
 
         assert "X-HEADER-4" in headers
-        assert headers["X-HEADER-4"] == {"type": "boolean"}
+        assert headers["X-HEADER-4"] == {"schema": {"type": "boolean"}}
 
     def test_response_header(self, api, client):
         @api.route("/test/")
@@ -1338,8 +1354,8 @@ class SwaggerTest(object):
 
         assert "X-HEADER" in headers
         assert headers["X-HEADER"] == {
-            "type": "string",
             "description": "An header",
+            "schema": {"type": "string"},
         }
 
     def test_api_and_response_header(self, api, client):
@@ -1393,24 +1409,25 @@ class SwaggerTest(object):
             return candidates[0]
 
         parameter = get_param("X-Header")
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "header"
         assert parameter["required"] is True
         assert parameter["description"] == "A required header"
 
         parameter = get_param("X-Header-2")
-        assert parameter["type"] == "array"
+        assert parameter_schema(parameter)["type"] == "array"
         assert parameter["in"] == "header"
-        assert parameter["items"]["type"] == "integer"
+        assert parameter_schema(parameter)["items"]["type"] == "integer"
         assert parameter["description"] == "Another header"
-        assert parameter["collectionFormat"] == "csv"
+        assert parameter["style"] == "form"
+        assert parameter["explode"] is False
 
         parameter = get_param("X-Header-3")
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "header"
 
         parameter = get_param("X-Header-4")
-        assert parameter["type"] == "boolean"
+        assert parameter_schema(parameter)["type"] == "boolean"
         assert parameter["in"] == "header"
 
     def test_description(self, api, client):
@@ -1541,9 +1558,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" not in data
+        assert "schemas" not in data.get("components", {})
         assert data["paths"]["/model-int/"]["get"]["responses"] == {
-            "200": {"description": "Success", "schema": {"type": "integer"}}
+            "200": response_with_schema("Success", {"type": "integer"})
         }
 
     def test_model_as_flat_dict(self, api, client):
@@ -1568,15 +1585,15 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Person"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Person"
         )
         assert (
-            path["post"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Person"
+            response_schema(path["post"]["responses"]["200"])["$ref"] == "#/components/schemas/Person"
         )
 
     def test_model_as_nested_dict(self, api, client):
@@ -1601,17 +1618,17 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
-                "address": {"$ref": "#/definitions/Address"},
+                "address": {"$ref": "#/components/schemas/Address"},
             },
             "type": "object",
         }
 
-        assert "Address" in data["definitions"]
-        assert data["definitions"]["Address"] == {
+        assert "Address" in schemas(data)
+        assert schemas(data)["Address"] == {
             "properties": {
                 "road": {"type": "string"},
             },
@@ -1620,10 +1637,10 @@ class SwaggerTest(object):
 
         path = data["paths"]["/model-as-dict/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Person"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Person"
         )
         assert (
-            path["post"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Person"
+            response_schema(path["post"]["responses"]["200"])["$ref"] == "#/components/schemas/Person"
         )
 
     def test_model_as_nested_dict_with_details(self, api, client):
@@ -1655,21 +1672,21 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "address": {
                     "description": "description",
                     "readOnly": True,
-                    "allOf": [{"$ref": "#/definitions/Address"}],
+                    "allOf": [{"$ref": "#/components/schemas/Address"}],
                 },
             },
             "type": "object",
         }
 
-        assert "Address" in data["definitions"]
-        assert data["definitions"]["Address"] == {
+        assert "Address" in schemas(data)
+        assert schemas(data)["Address"] == {
             "properties": {
                 "road": {"type": "string"},
             },
@@ -1694,15 +1711,14 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         responses = data["paths"]["/model-as-dict/"]["get"]["responses"]
         assert responses == {
-            "200": {
-                "description": "Success",
-                "schema": {"$ref": "#/definitions/Person"},
-            }
+            "200": response_with_schema(
+                "Success", {"$ref": "#/components/schemas/Person"}
+            )
         }
 
     def test_model_with_non_uri_chars_in_name(self, api, client):
@@ -1722,17 +1738,17 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert name in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert name in schemas(data)
 
         path = data["paths"]["/model-bad-uri/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"]
-            == "#/definitions/Person%2F%2F%3Flots%7B%7D%20of%20%26illegals%40%60"
+            response_schema(path["get"]["responses"]["200"])["$ref"]
+            == "#/components/schemas/Person%2F%2F%3Flots%7B%7D%20of%20%26illegals%40%60"
         )
         assert (
-            path["post"]["responses"]["201"]["schema"]["$ref"]
-            == "#/definitions/Person%2F%2F%3Flots%7B%7D%20of%20%26illegals%40%60"
+            response_schema(path["post"]["responses"]["201"])["$ref"]
+            == "#/components/schemas/Person%2F%2F%3Flots%7B%7D%20of%20%26illegals%40%60"
         )
 
     def test_marchal_decorator_with_code(self, api, client):
@@ -1753,15 +1769,14 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         responses = data["paths"]["/model-as-dict/"]["delete"]["responses"]
         assert responses == {
-            "204": {
-                "description": "Success",
-                "schema": {"$ref": "#/definitions/Person"},
-            }
+            "204": response_with_schema(
+                "Success", {"$ref": "#/components/schemas/Person"}
+            )
         }
 
     def test_marchal_decorator_with_description(self, api, client):
@@ -1782,15 +1797,14 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         responses = data["paths"]["/model-as-dict/"]["get"]["responses"]
         assert responses == {
-            "200": {
-                "description": "Some details",
-                "schema": {"$ref": "#/definitions/Person"},
-            }
+            "200": response_with_schema(
+                "Some details", {"$ref": "#/components/schemas/Person"}
+            )
         }
 
     def test_marhsal_decorator_with_envelope(self, api, client):
@@ -1811,15 +1825,15 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         responses = data["paths"]["/model-as-dict/"]["get"]["responses"]
         assert responses == {
-            "200": {
-                "description": "Success",
-                "schema": {"properties": {"person": {"$ref": "#/definitions/Person"}}},
-            }
+            "200": response_with_schema(
+                "Success",
+                {"properties": {"person": {"$ref": "#/components/schemas/Person"}}},
+            )
         }
 
     def test_model_as_flat_dict_with_marchal_decorator_list(self, api, client):
@@ -1840,9 +1854,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -1852,9 +1866,9 @@ class SwaggerTest(object):
         }
 
         path = data["paths"]["/model-as-dict/"]
-        assert path["get"]["responses"]["200"]["schema"] == {
+        assert response_schema(path["get"]["responses"]["200"]) == {
             "type": "array",
-            "items": {"$ref": "#/definitions/Person"},
+            "items": {"$ref": "#/components/schemas/Person"},
         }
 
     def test_model_as_flat_dict_with_marchal_decorator_list_alt(self, api, client):
@@ -1875,13 +1889,13 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
-        assert path["get"]["responses"]["200"]["schema"] == {
+        assert response_schema(path["get"]["responses"]["200"]) == {
             "type": "array",
-            "items": {"$ref": "#/definitions/Person"},
+            "items": {"$ref": "#/components/schemas/Person"},
         }
 
     def test_model_as_flat_dict_with_marchal_decorator_list_kwargs(self, api, client):
@@ -1902,18 +1916,18 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
         assert path["get"]["responses"] == {
-            "201": {
-                "description": "Some details",
-                "schema": {
+            "201": response_with_schema(
+                "Some details",
+                {
                     "type": "array",
-                    "items": {"$ref": "#/definitions/Person"},
+                    "items": {"$ref": "#/components/schemas/Person"},
                 },
-            }
+            )
         }
 
     def test_model_as_dict_with_list(self, api, client):
@@ -1934,9 +1948,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -1946,8 +1960,8 @@ class SwaggerTest(object):
         }
 
         path = data["paths"]["/model-with-list/"]
-        assert path["get"]["responses"]["200"]["schema"] == {
-            "$ref": "#/definitions/Person"
+        assert response_schema(path["get"]["responses"]["200"]) == {
+            "$ref": "#/components/schemas/Person"
         }
 
     def test_model_as_nested_dict_with_list(self, api, client):
@@ -1976,9 +1990,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert "Address" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert "Address" in schemas(data)
 
     def test_model_list_of_primitive_types(self, api, client):
         @api.route("/model-list/")
@@ -1993,14 +2007,14 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" not in data
+        assert "schemas" not in data.get("components", {})
 
         path = data["paths"]["/model-list/"]
-        assert path["get"]["responses"]["200"]["schema"] == {
+        assert response_schema(path["get"]["responses"]["200"]) == {
             "type": "array",
             "items": {"type": "integer"},
         }
-        assert path["post"]["responses"]["200"]["schema"] == {
+        assert response_schema(path["post"]["responses"]["200"]) == {
             "type": "array",
             "items": {"type": "string"},
         }
@@ -2027,14 +2041,14 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
         for method in "get", "post":
-            assert path[method]["responses"]["200"]["schema"] == {
+            assert response_schema(path[method]["responses"]["200"]) == {
                 "type": "array",
-                "items": {"$ref": "#/definitions/Person"},
+                "items": {"$ref": "#/components/schemas/Person"},
             }
 
     def test_model_doc_on_class(self, api, client):
@@ -2057,13 +2071,13 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
         for method in "get", "post":
-            assert path[method]["responses"]["200"]["schema"] == {
-                "$ref": "#/definitions/Person"
+            assert response_schema(path[method]["responses"]["200"]) == {
+                "$ref": "#/components/schemas/Person"
             }
 
     def test_model_doc_for_method_on_class(self, api, client):
@@ -2086,12 +2100,12 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
 
         path = data["paths"]["/model-as-dict/"]
-        assert path["get"]["responses"]["200"]["schema"] == {
-            "$ref": "#/definitions/Person"
+        assert response_schema(path["get"]["responses"]["200"]) == {
+            "$ref": "#/components/schemas/Person"
         }
         assert "schema" not in path["post"]["responses"]["200"]
 
@@ -2112,9 +2126,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2141,9 +2155,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2188,7 +2202,7 @@ class SwaggerTest(object):
 
     def test_specs_no_duplicate_response_keys(self, api, client):
         """
-        This tests that the swagger.json document will not be written with duplicate object keys
+        This tests that the OpenAPI document will not be written with duplicate object keys
         due to the coercion of dict keys to string. The last @api.response should win.
         """
 
@@ -2220,10 +2234,9 @@ class SwaggerTest(object):
         op = paths["/test/"]["get"]
         print(op["responses"])
         assert op["responses"] == {
-            "200": {
-                "description": "Success on method",
-                "schema": {"$ref": "#/definitions/SomeModel"},
-            },
+            "200": response_with_schema(
+                "Success on method", {"$ref": "#/components/schemas/SomeModel"}
+            ),
             "404": {
                 "description": "Not Found on method",
             },
@@ -2259,16 +2272,16 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" not in data["definitions"]
-        assert "Child" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" not in schemas(data)
+        assert "Child" in schemas(data)
 
         path = data["paths"]["/extend/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Child"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Child"
         )
         assert (
-            path["post"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Child"
+            response_schema(path["post"]["responses"]["200"])["$ref"] == "#/components/schemas/Child"
         )
 
     def test_inherit(self, api, client):
@@ -2304,29 +2317,29 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert "Child" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert "Child" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
             },
             "type": "object",
         }
-        assert data["definitions"]["Child"] == {
+        assert schemas(data)["Child"] == {
             "allOf": [
-                {"$ref": "#/definitions/Person"},
+                {"$ref": "#/components/schemas/Person"},
                 {"properties": {"extra": {"type": "string"}}, "type": "object"},
             ]
         }
 
         path = data["paths"]["/inherit/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Child"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Child"
         )
         assert (
-            path["post"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Child"
+            response_schema(path["post"]["responses"]["200"])["$ref"] == "#/components/schemas/Child"
         )
 
         data = client.get_json("/inherit/")
@@ -2387,9 +2400,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert "Child" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert "Child" in schemas(data)
 
         data = client.get_json("/inherit/")
         assert data == {
@@ -2458,15 +2471,15 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert "Child1" in data["definitions"]
-        assert "Child2" in data["definitions"]
-        assert "Output" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert "Child1" in schemas(data)
+        assert "Child2" in schemas(data)
+        assert "Output" in schemas(data)
 
         path = data["paths"]["/polymorph/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Output"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Output"
         )
 
     def test_polymorph_inherit_list(self, api, client):
@@ -2518,15 +2531,15 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert "Child1" in data["definitions"]
-        assert "Child2" in data["definitions"]
-        assert "Output" in data["definitions"]
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert "Child1" in schemas(data)
+        assert "Child2" in schemas(data)
+        assert "Output" in schemas(data)
 
         path = data["paths"]["/polymorph/"]
         assert (
-            path["get"]["responses"]["200"]["schema"]["$ref"] == "#/definitions/Output"
+            response_schema(path["get"]["responses"]["200"])["$ref"] == "#/components/schemas/Output"
         )
 
         data = client.get_json("/polymorph/")
@@ -2561,9 +2574,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2573,16 +2586,9 @@ class SwaggerTest(object):
         }
 
         op = data["paths"]["/model-as-dict/"]["post"]
-        assert len(op["parameters"]) == 1
-
-        parameter = op["parameters"][0]
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {"$ref": "#/definitions/Person"},
-        }
-        assert "description" not in parameter
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {"$ref": "#/components/schemas/Person"}
+        assert "description" not in op["requestBody"]
 
     def test_body_model_shortcut(self, api, client):
         fields = api.model(
@@ -2603,9 +2609,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2615,18 +2621,11 @@ class SwaggerTest(object):
         }
 
         op = data["paths"]["/model-as-dict/"]["post"]
-        assert op["responses"]["200"]["schema"]["$ref"] == "#/definitions/Person"
+        assert response_schema(op["responses"]["200"])["$ref"] == "#/components/schemas/Person"
 
-        assert len(op["parameters"]) == 1
-
-        parameter = op["parameters"][0]
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {"$ref": "#/definitions/Person"},
-        }
-        assert "description" not in parameter
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {"$ref": "#/components/schemas/Person"}
+        assert "description" not in op["requestBody"]
 
     def test_expect_model_list(self, api, client):
         model = api.model(
@@ -2646,9 +2645,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2658,16 +2657,10 @@ class SwaggerTest(object):
         }
 
         op = data["paths"]["/model-list/"]["post"]
-        parameter = op["parameters"][0]
-
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {
                 "type": "array",
-                "items": {"$ref": "#/definitions/Person"},
-            },
+                "items": {"$ref": "#/components/schemas/Person"},
         }
 
     def test_both_model_and_parser_from_expect(self, api, client):
@@ -2691,9 +2684,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2705,23 +2698,16 @@ class SwaggerTest(object):
         assert "/with-parser/" in data["paths"]
 
         op = data["paths"]["/with-parser/"]["get"]
-        assert len(op["parameters"]) == 2
+        assert len(op["parameters"]) == 1
 
-        parameters = dict((p["in"], p) for p in op["parameters"])
-
-        parameter = parameters["query"]
+        parameter = op["parameters"][0]
         assert parameter["name"] == "param"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Some param"
 
-        parameter = parameters["body"]
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {"$ref": "#/definitions/Person"},
-        }
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {"$ref": "#/components/schemas/Person"}
 
     def test_expect_primitive_list(self, api, client):
         @api.route("/model-list/")
@@ -2733,15 +2719,10 @@ class SwaggerTest(object):
         data = client.get_specs()
 
         op = data["paths"]["/model-list/"]["post"]
-        parameter = op["parameters"][0]
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {
                 "type": "array",
                 "items": {"type": "string"},
-            },
         }
 
     def test_body_model_list(self, api, client):
@@ -2762,9 +2743,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2774,16 +2755,10 @@ class SwaggerTest(object):
         }
 
         op = data["paths"]["/model-list/"]["post"]
-        parameter = op["parameters"][0]
-
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "schema": {
+        assert op["requestBody"]["required"] is True
+        assert request_body_schema(op) == {
                 "type": "array",
-                "items": {"$ref": "#/definitions/Person"},
-            },
+                "items": {"$ref": "#/components/schemas/Person"},
         }
 
     def test_expect_model_with_description(self, api, client):
@@ -2804,9 +2779,9 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert "definitions" in data
-        assert "Person" in data["definitions"]
-        assert data["definitions"]["Person"] == {
+        assert "schemas" in data.get("components", {})
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"] == {
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "integer"},
@@ -2816,17 +2791,9 @@ class SwaggerTest(object):
         }
 
         op = data["paths"]["/model-as-dict/"]["post"]
-        assert len(op["parameters"]) == 1
-
-        parameter = op["parameters"][0]
-
-        assert parameter == {
-            "name": "payload",
-            "in": "body",
-            "required": True,
-            "description": "Body description",
-            "schema": {"$ref": "#/definitions/Person"},
-        }
+        assert op["requestBody"]["required"] is True
+        assert op["requestBody"]["description"] == "Body description"
+        assert request_body_schema(op) == {"$ref": "#/components/schemas/Person"}
 
     def test_authorizations(self, app, client):
         restx.Api(
@@ -2845,7 +2812,7 @@ class SwaggerTest(object):
         #         return {}
 
         data = client.get_specs()
-        assert "securityDefinitions" in data
+        assert "securitySchemes" in data.get("components", {})
         assert "security" not in data
 
         # path = data['paths']['/authorizations/']
@@ -2867,7 +2834,7 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == {
+        assert security_schemes(data) == {
             "apikey": {"type": "apiKey", "in": "header", "name": "X-API"}
         }
         assert data["security"] == [{"apikey": []}]
@@ -2909,7 +2876,18 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == security_definitions
+        assert security_schemes(data) == {
+            "oauth2": oauth2_scheme(
+                "accessCode",
+                "https://somewhere.com/token",
+                security_definitions["oauth2"]["scopes"],
+            ),
+            "implicit": oauth2_scheme(
+                "implicit",
+                "https://somewhere.com/token",
+                security_definitions["implicit"]["scopes"],
+            ),
+        }
         assert data["security"] == [{"oauth2": ["read"], "implicit": ["read", "write"]}]
 
         op = data["paths"]["/authorizations/"]["post"]
@@ -2940,7 +2918,14 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == security_definitions
+        assert security_schemes(data) == {
+            "apikey": {"type": "apiKey", "in": "header", "name": "X-API"},
+            "oauth2": oauth2_scheme(
+                "accessCode",
+                "https://somewhere.com/token",
+                security_definitions["oauth2"]["scopes"],
+            ),
+        }
         assert data["security"] == [{"apikey": []}, {"oauth2": ["read"]}]
 
         op = data["paths"]["/authorizations/"]["post"]
@@ -2965,7 +2950,7 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == {
+        assert security_schemes(data) == {
             "apikey": {"type": "apiKey", "in": "header", "name": "X-API"}
         }
         assert "security" not in data
@@ -3000,7 +2985,14 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == security_definitions
+        assert security_schemes(data) == {
+            "apikey": {"type": "apiKey", "in": "header", "name": "X-API"},
+            "oauth2": oauth2_scheme(
+                "accessCode",
+                "https://somewhere.com/token",
+                security_definitions["oauth2"]["scopes"],
+            ),
+        }
 
         op = data["paths"]["/authorizations/"]["get"]
         assert op["security"] == [{"oauth2": ["read", "write"]}]
@@ -3035,7 +3027,14 @@ class SwaggerTest(object):
                 return {}
 
         data = client.get_specs()
-        assert data["securityDefinitions"] == security_definitions
+        assert security_schemes(data) == {
+            "apikey": {"type": "apiKey", "in": "header", "name": "X-API"},
+            "oauth2": oauth2_scheme(
+                "accessCode",
+                "https://somewhere.com/token",
+                security_definitions["oauth2"]["scopes"],
+            ),
+        }
 
         path = data["paths"]["/authorizations/"]
         for method in "get", "post":
@@ -3145,8 +3144,9 @@ class SwaggerTest(object):
         assert "produces" not in get_operation
 
         post_operation = data["paths"]["/test/"]["post"]
-        assert "produces" in post_operation
-        assert post_operation["produces"] == ["application/octet-stream"]
+        assert post_operation["responses"]["200"]["content"] == {
+            "application/octet-stream": {}
+        }
 
     def test_deprecated_resource(self, api, client):
         @api.deprecated
@@ -3394,7 +3394,7 @@ class SwaggerTest(object):
 
         parameter = by_name["age"]
         assert parameter["name"] == "age"
-        assert parameter["type"] == "integer"
+        assert parameter_schema(parameter)["type"] == "integer"
         assert parameter["in"] == "path"
         assert parameter["required"] is True
         assert parameter["description"] == "An age"
@@ -3407,7 +3407,7 @@ class SwaggerTest(object):
 
         parameter = get["parameters"][0]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "A query string"
 
@@ -3416,7 +3416,7 @@ class SwaggerTest(object):
 
         parameter = post["parameters"][0]
         assert parameter["name"] == "q"
-        assert parameter["type"] == "string"
+        assert parameter_schema(parameter)["type"] == "string"
         assert parameter["in"] == "query"
         assert parameter["description"] == "Overriden description"
 
@@ -3489,12 +3489,11 @@ class SwaggerDeprecatedTest(object):
         body_params = [p for p in parser.__schema__ if p["in"] == "body"]
         result = restx.swagger.build_request_body_parameters_schema(body_params)
 
-        assert result["name"] == "payload"
         assert result["required"]
-        assert result["in"] == "body"
-        assert result["schema"]["type"] == "object"
-        assert result["schema"]["properties"]["test1"]["type"] == "integer"
-        assert result["schema"]["properties"]["test2"]["type"] == "string"
+        schema = result["content"]["application/json"]["schema"]
+        assert schema["type"] == "object"
+        assert schema["properties"]["test1"]["type"] == "integer"
+        assert schema["properties"]["test2"]["type"] == "string"
 
     def test_expect_unused_model(self, app, api, client):
         from flask_restx import fields
@@ -3519,7 +3518,7 @@ class SwaggerDeprecatedTest(object):
         path = data["paths"]["/with-parser/"]
         assert "parameters" not in path
 
-        model = data["definitions"]["SomeModel"]
+        model = schemas(data)["SomeModel"]
         assert model == {
             "properties": {"count": {"type": "integer"}, "param": {"type": "string"}},
             "type": "object",
@@ -3545,7 +3544,7 @@ class SwaggerDeprecatedTest(object):
 
         data = client.get_specs()
         assert "/with-parser/" in data["paths"]
-        assert "definitions" not in data
+        assert "schemas" not in data.get("components", {})
 
         path = data["paths"]["/with-parser/"]
         assert "parameters" not in path

@@ -312,7 +312,7 @@ class PostmanTest(object):
         requests = dict((r["name"], r["headers"]) for r in data["requests"])
 
         assert requests["json"] == "Content-Type:application/json"
-        assert requests["form"] == "Content-Type:multipart/form-data"
+        assert requests["form"] == "Content-Type:application/x-www-form-urlencoded"
         assert requests["file"] == "Content-Type:multipart/form-data"
 
         # No content-type on get
@@ -404,6 +404,6 @@ class PostmanTest(object):
 
         assert len(data["requests"]) == 1
         request = data["requests"][0]
-        assert request["name"] == "Swagger specifications"
-        assert request["description"] == "The API Swagger specifications as JSON"
-        assert request["url"] == "http://localhost/swagger.json"
+        assert request["name"] == "OpenAPI specifications"
+        assert request["description"] == "The API OpenAPI specifications as JSON"
+        assert request["url"] == "http://localhost/openapi.json"

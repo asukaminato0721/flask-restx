@@ -378,7 +378,7 @@ The :meth:`Api/Namespace.clone <~Namespace.clone>` also register it on the API.
 Polymorphism with ``api.inherit``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The :meth:`Model.inherit` method allows to extend a model in the "Swagger way"
+The :meth:`Model.inherit` method allows to extend a model in the "OpenAPI way"
 and to start handling polymorphism.
 
 .. code-block:: python
@@ -393,7 +393,7 @@ and to start handling polymorphism.
     })
 
 The :meth:`Api/Namespace.clone <~Namespace.clone>` will register both the parent and the child
-in the Swagger models definitions.
+in the OpenAPI schemas.
 
 .. code-block:: python
 
@@ -535,7 +535,7 @@ You can define models using `JSON Schema <http://json-schema.org/examples.html>`
                 'format': 'date-time'
             },
             'address': {
-                '$ref': '#/definitions/Address',
+                '$ref': '#/components/schemas/Address',
             }
         },
         'type': 'object'

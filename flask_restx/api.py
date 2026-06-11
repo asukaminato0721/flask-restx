@@ -75,16 +75,16 @@ class Api(object):
         - A resource registered as 'resource' will be available as ``{endpoint}.resource``
 
     :param flask.Flask|flask.Blueprint app: the Flask application object or a Blueprint
-    :param str version: The API version (used in Swagger documentation)
-    :param str title: The API title (used in Swagger documentation)
-    :param str description: The API description (used in Swagger documentation)
-    :param str terms_url: The API terms page URL (used in Swagger documentation)
-    :param str contact: A contact email for the API (used in Swagger documentation)
-    :param str license: The license associated to the API (used in Swagger documentation)
-    :param str license_url: The license page URL (used in Swagger documentation)
+    :param str version: The API version (used in OpenAPI documentation)
+    :param str title: The API title (used in OpenAPI documentation)
+    :param str description: The API description (used in OpenAPI documentation)
+    :param str terms_url: The API terms page URL (used in OpenAPI documentation)
+    :param str contact: A contact email for the API (used in OpenAPI documentation)
+    :param str license: The license associated to the API (used in OpenAPI documentation)
+    :param str license_url: The license page URL (used in OpenAPI documentation)
     :param str endpoint: The API base endpoint (default to 'api).
     :param str default: The default namespace base name (default to 'default')
-    :param str default_label: The default namespace label (used in Swagger documentation)
+    :param str default_label: The default namespace label (used in OpenAPI documentation)
     :param str default_mediatype: The default media type to return
     :param bool validate: Whether or not the API should perform input payload validation.
     :param bool ordered: Whether or not preserve order models and marshalling.
@@ -93,7 +93,7 @@ class Api(object):
     :param list decorators: Decorators to attach to every resource
     :param bool catch_all_404s: Use :meth:`handle_error`
         to handle 404 errors throughout your app
-    :param dict authorizations: A Swagger Authorizations declaration as dictionary
+    :param dict authorizations: An OpenAPI security schemes declaration as dictionary
     :param bool serve_challenge_on_401: Serve basic authentication challenge with 401
         responses (default 'False')
     :param FormatChecker format_checker: A jsonschema.FormatChecker object that is hooked into
@@ -102,7 +102,7 @@ class Api(object):
     :param url_scheme: If set to a string (e.g. http, https), then the specs_url and base_url will explicitly use this
         scheme regardless of how the application is deployed. This is necessary for some deployments behind a reverse
         proxy.
-    :param str default_swagger_filename: The default swagger filename.
+    :param str default_swagger_filename: The default OpenAPI filename.
     """
 
     def __init__(
@@ -133,7 +133,7 @@ class Api(object):
         serve_challenge_on_401=False,
         format_checker=None,
         url_scheme=None,
-        default_swagger_filename="swagger.json",
+        default_swagger_filename="openapi.json",
         **kwargs,
     ):
         self.version = version
@@ -208,12 +208,12 @@ class Api(object):
         >>> api.init_app(app)
 
         :param flask.Flask app: the Flask application object
-        :param str title: The API title (used in Swagger documentation)
-        :param str description: The API description (used in Swagger documentation)
-        :param str terms_url: The API terms page URL (used in Swagger documentation)
-        :param str contact: A contact email for the API (used in Swagger documentation)
-        :param str license: The license associated to the API (used in Swagger documentation)
-        :param str license_url: The license page URL (used in Swagger documentation)
+        :param str title: The API title (used in OpenAPI documentation)
+        :param str description: The API description (used in OpenAPI documentation)
+        :param str terms_url: The API terms page URL (used in OpenAPI documentation)
+        :param str contact: A contact email for the API (used in OpenAPI documentation)
+        :param str license: The license associated to the API (used in OpenAPI documentation)
+        :param str license_url: The license page URL (used in OpenAPI documentation)
         :param url_scheme: If set to a string (e.g. http, https), then the specs_url and base_url will explicitly use
             this scheme regardless of how the application is deployed. This is necessary for some deployments behind a
             reverse proxy.
@@ -532,7 +532,7 @@ class Api(object):
     @property
     def specs_url(self):
         """
-        The Swagger specifications relative url (ie. `swagger.json`). If
+        The OpenAPI specifications relative url (ie. `openapi.json`). If
         the spec_url_scheme attribute is set, then the full url is provided instead
         (e.g. http://localhost/swaggger.json).
 
@@ -564,7 +564,7 @@ class Api(object):
     @cached_property
     def __schema__(self):
         """
-        The Swagger specifications/schema for this API
+        The OpenAPI specifications/schema for this API
 
         :returns dict: the schema as a serializable dict
         """
@@ -817,7 +817,7 @@ class Api(object):
         Serialize the API as Postman collection (v1)
 
         :param bool urlvars: whether to include or not placeholders for query strings
-        :param bool swagger: whether to include or not the swagger.json specifications
+        :param bool swagger: whether to include or not the OpenAPI specifications
 
         """
         return PostmanCollectionV1(self, swagger=swagger).as_dict(urlvars=urlvars)
@@ -834,37 +834,37 @@ class Api(object):
             registry = Registry()
             schema = self.__schema__
 
-            # If schema has definitions, register it
-            if "definitions" in schema:
+            # If schema has components, register it
+            if "components" in schema:
                 schema_id = schema.get("$id", "http://localhost/schema.json")
                 registry = registry.with_resource(schema_id, schema)
             else:
-                # If no definitions in schema, register all models individually
+                # If no components in schema, register all models individually
                 for name, model in self.models.items():
                     model_schema = model.__schema__
                     # Add $id to the model schema so it can be referenced
                     if "$id" not in model_schema:
                         model_schema = model_schema.copy()
                         model_schema["$id"] = (
-                            f"http://localhost/schema.json#/definitions/{name}"
+                            f"http://localhost/schema.json#/components/schemas/{name}"
                         )
                     registry = registry.with_resource(
-                        f"http://localhost/schema.json#/definitions/{name}",
+                        f"http://localhost/schema.json#/components/schemas/{name}",
                         model_schema,
                     )
 
-                # Also register the root schema with definitions
+                # Also register the root schema with components
                 if self.models:
-                    definitions = {}
+                    schemas = {}
                     for name, model in self.models.items():
-                        definitions[name] = model.__schema__
+                        schemas[name] = model.__schema__
 
-                    schema_with_definitions = {
+                    schema_with_components = {
                         "$id": "http://localhost/schema.json",
-                        "definitions": definitions,
+                        "components": {"schemas": schemas},
                     }
                     registry = registry.with_resource(
-                        "http://localhost/schema.json", schema_with_definitions
+                        "http://localhost/schema.json", schema_with_components
                     )
 
             self._refresolver = registry
@@ -996,7 +996,7 @@ class Api(object):
 
 
 class SwaggerView(Resource):
-    """Render the Swagger specifications as JSON"""
+    """Render the OpenAPI specifications as JSON"""
 
     def get(self):
         schema = self.api.__schema__

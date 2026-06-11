@@ -41,7 +41,7 @@ _friendly_location = {
     "files": "an uploaded file",
 }
 
-#: Maps Flask-RESTX RequestParser locations to Swagger ones
+#: Maps Flask-RESTX RequestParser locations to OpenAPI ones
 LOCATIONS = {
     "args": "query",
     "form": "formData",
@@ -51,7 +51,7 @@ LOCATIONS = {
     "files": "formData",
 }
 
-#: Maps Python primitives types to Swagger ones
+#: Maps Python primitives types to OpenAPI ones
 PY_TYPES = {
     int: "integer",
     str: "string",

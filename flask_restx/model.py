@@ -69,7 +69,7 @@ class ModelBase(object):
 
         if self.__parents__:
             refs = [
-                {"$ref": "#/definitions/{0}".format(parent.name)}
+                {"$ref": "#/components/schemas/{0}".format(parent.name)}
                 for parent in self.__parents__
             ]
 
@@ -106,18 +106,23 @@ class ModelBase(object):
 
                 schema_str = json.dumps(self.__schema__)
                 if '"$ref"' in schema_str:
-                    # Create a schema with inline definitions from the registry
-                    definitions = {}
+                    # Create a schema with inline components from the registry
+                    schemas = {}
                     for uri in resolver:
                         resource = resolver[uri]
-                        if isinstance(resource, dict) and "definitions" in resource:
-                            definitions.update(resource["definitions"])
+                        if isinstance(resource, dict):
+                            if "components" in resource:
+                                schemas.update(
+                                    resource.get("components", {}).get("schemas", {})
+                                )
+                            elif "definitions" in resource:
+                                schemas.update(resource["definitions"])
 
-                    if definitions:
-                        # Create a new schema that includes the definitions
+                    if schemas:
+                        # Create a new schema that includes the components
                         schema_to_validate = {
                             "$id": "http://localhost/schema.json",
-                            "definitions": definitions,
+                            "components": {"schemas": schemas},
                             **self.__schema__,
                         }
 

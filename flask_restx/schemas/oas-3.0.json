@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "A JSON Schema for OpenAPI 3.0 API.",
+  "type": "object",
+  "required": ["openapi", "info", "paths"],
+  "properties": {
+    "openapi": {
+      "type": "string",
+      "pattern": "^3\\.0\\.\\d+$"
+    },
+    "info": {
+      "type": "object",
+      "required": ["title", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "title": {"type": "string"},
+        "version": {"type": "string"}
+      }
+    },
+    "servers": {"type": "array"},
+    "paths": {"type": "object"},
+    "components": {"type": "object"},
+    "security": {"type": "array"},
+    "tags": {"type": "array"},
+    "externalDocs": {"type": "object"}
+  },
+  "patternProperties": {
+    "^x-": {}
+  },
+  "additionalProperties": false
+}

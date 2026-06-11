@@ -100,7 +100,7 @@ class APITest(object):
     def test_specs_endpoint_not_found_if_not_added(self, app, client):
         api = restx.Api()
         api.init_app(app, add_specs=False)
-        resp = client.get("/swagger.json")
+        resp = client.get("/openapi.json")
         assert resp.status_code == 404
 
     def test_default_endpoint(self, app):
@@ -307,8 +307,16 @@ class APITest(object):
         assert {"apikey": []} in api.__schema__["paths"]["/ns1/"]["get"]["security"]
         assert {"oauth2": []} in api.__schema__["paths"]["/ns2/"]["post"]["security"]
         unified_auth = copy.copy(a1)
-        unified_auth.update(a2)
-        assert api.__schema__["securityDefinitions"] == unified_auth
+        unified_auth["oauth2"] = {
+            "type": "oauth2",
+            "flows": {
+                "authorizationCode": {
+                    "tokenUrl": "https://somewhere.com/token",
+                    "scopes": a2["oauth2"]["scopes"],
+                }
+            },
+        }
+        assert api.__schema__["components"]["securitySchemes"] == unified_auth
 
     def test_non_ordered_namespace(self, app):
         api = restx.Api(app)
@@ -343,9 +351,9 @@ class APITest(object):
     def test_specs_url(self, app):
         api = restx.Api(app)
         specs_url = api.specs_url
-        assert specs_url == "/swagger.json"
+        assert specs_url == "/openapi.json"
 
     def test_url_scheme(self, app):
         api = restx.Api(app, url_scheme="https")
-        assert api.specs_url == "https://localhost/swagger.json"
+        assert api.specs_url == "https://localhost/openapi.json"
         assert api.base_url == "https://localhost/"
