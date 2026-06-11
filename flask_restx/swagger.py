@@ -15,7 +15,7 @@ from .reqparse import RequestParser
 from .utils import merge, not_none, not_none_sorted
 from ._http import HTTPStatus
 
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 #: Maps Flask/Werkzeug routing types to OpenAPI schema types
 PATH_TYPES = {
@@ -78,6 +78,18 @@ def replace_refs(schema):
     elif isinstance(schema, list):
         return [replace_refs(value) for value in schema]
     return schema
+
+
+def schema_refs(schema):
+    if isinstance(schema, dict):
+        ref = schema.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+            yield unquote(ref.removeprefix("#/components/schemas/"))
+        for value in schema.values():
+            yield from schema_refs(value)
+    elif isinstance(schema, list):
+        for value in schema:
+            yield from schema_refs(value)
 
 
 def _v(value):
@@ -808,10 +820,20 @@ class Swagger(object):
         )
 
     def serialize_definitions(self):
+        self.register_schema_refs()
         return dict(
             (name, replace_refs(model.__schema__))
             for name, model in self._registered_models.items()
         )
+
+    def register_schema_refs(self):
+        index = 0
+        while index < len(self._registered_models):
+            model = list(self._registered_models.values())[index]
+            index += 1
+            for name in schema_refs(model.__schema__):
+                if name in self.api.models and name not in self._registered_models:
+                    self.register_model(name)
 
     def serialize_schema(self, model):
         if isinstance(model, (list, tuple)):

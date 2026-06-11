@@ -1643,6 +1643,42 @@ class SwaggerTest(object):
             response_schema(path["post"]["responses"]["200"])["$ref"] == "#/components/schemas/Person"
         )
 
+    def test_schema_model_refs_registered_component_schemas(self, app, api):
+        api.schema_model(
+            "Address",
+            {
+                "properties": {"road": {"type": "string"}},
+                "type": "object",
+            },
+        )
+        api.schema_model(
+            "Person",
+            {
+                "properties": {
+                    "address": {"$ref": "#/components/schemas/Address"},
+                },
+                "type": "object",
+            },
+        )
+
+        @api.route("/schema-model-ref/")
+        class SchemaModelRef(restx.Resource):
+            @api.response(200, "Success", "Person")
+            def get(self):
+                return {}
+
+        data = app.test_client().get_specs()
+
+        assert "Person" in schemas(data)
+        assert schemas(data)["Person"]["properties"]["address"] == {
+            "$ref": "#/components/schemas/Address",
+        }
+        assert "Address" in schemas(data)
+        assert schemas(data)["Address"] == {
+            "properties": {"road": {"type": "string"}},
+            "type": "object",
+        }
+
     def test_model_as_nested_dict_with_details(self, api, client):
         address_fields = api.model(
             "Address",
