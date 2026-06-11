@@ -253,6 +253,21 @@ def build_request_body_parameters_schema(body_params):
     }
 
 
+def clean_request_body(request_body):
+    """
+    Return a valid OpenAPI Request Body Object.
+
+    Flask-RESTX stores request bodies in the same intermediate mapping used for
+    parameters, where the dictionary key becomes ``name`` later in the pipeline.
+    OpenAPI 3 requestBody objects cannot contain Parameter Object fields.
+    """
+    return {
+        key: value
+        for key, value in request_body.items()
+        if key not in ("name", "in")
+    }
+
+
 class Swagger(object):
     """
     An OpenAPI documentation wrapper for an API instance.
@@ -321,7 +336,7 @@ class Swagger(object):
                 )
 
         specs = {
-            "openapi": "3.0.3",
+            "openapi": "3.1.0",
             "paths": not_none_sorted(paths),
             "info": infos,
             "servers": self.servers_for(basepath),
@@ -500,7 +515,7 @@ class Swagger(object):
         responses = {}
         for exception, handler in self.api.error_handlers.items():
             doc = parse_docstring(handler)
-            response = {"description": doc["summary"]}
+            response = {"description": doc["summary"] or exception.__name__}
             apidoc = getattr(handler, "__apidoc__", {})
             self.process_headers(response, apidoc)
             if "responses" in apidoc:
@@ -584,7 +599,7 @@ class Swagger(object):
             raise ValueError("Can't use formData and body at the same time")
         request_body = None
         if request_bodies:
-            request_body = request_bodies[-1]
+            request_body = clean_request_body(request_bodies[-1])
         elif form_params:
             request_body = self.request_body_from_form_params(form_params)
         return params, request_body

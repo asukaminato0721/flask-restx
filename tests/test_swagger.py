@@ -2,7 +2,7 @@ import pytest
 
 from textwrap import dedent
 
-from flask import url_for, Blueprint
+from flask import url_for, Blueprint, Flask
 from werkzeug.datastructures import FileStorage
 
 import flask_restx as restx
@@ -50,10 +50,26 @@ def oauth2_scheme(flow, token_url, scopes):
     }
 
 
+def test_registered_error_responses_have_description():
+    app = Flask(__name__)
+    api = restx.Api(app)
+
+    class CustomError(Exception):
+        pass
+
+    @api.errorhandler(CustomError)
+    def handle_custom_error(error):
+        return {"message": str(error)}, 400
+
+    spec = app.test_client().get("/openapi.json").get_json()
+
+    assert spec["components"]["responses"]["CustomError"]["description"] == "CustomError"
+
+
 class SwaggerTest(object):
     def test_specs_endpoint(self, api, client):
         data = client.get_specs("")
-        assert data["openapi"] == "3.0.3"
+        assert data["openapi"] == "3.1.0"
         assert data["servers"] == [{"url": "/"}]
         assert "produces" not in data
         assert "consumes" not in data
@@ -63,7 +79,7 @@ class SwaggerTest(object):
     @pytest.mark.api(prefix="/api")
     def test_specs_endpoint_with_prefix(self, api, client):
         data = client.get_specs("/api")
-        assert data["openapi"] == "3.0.3"
+        assert data["openapi"] == "3.1.0"
         assert data["servers"] == [{"url": "/api"}]
         assert "produces" not in data
         assert "consumes" not in data
@@ -94,7 +110,7 @@ class SwaggerTest(object):
         api.init_app(app)
 
         data = client.get_specs()
-        assert data["openapi"] == "3.0.3"
+        assert data["openapi"] == "3.1.0"
         assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
@@ -129,7 +145,7 @@ class SwaggerTest(object):
 
         data = client.get_specs()
 
-        assert data["openapi"] == "3.0.3"
+        assert data["openapi"] == "3.1.0"
         assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
@@ -163,7 +179,7 @@ class SwaggerTest(object):
         api.init_app(app)
 
         data = client.get_specs()
-        assert data["openapi"] == "3.0.3"
+        assert data["openapi"] == "3.1.0"
         assert data["servers"] == [{"url": "/"}]
         assert data["paths"] == {}
 
@@ -2623,6 +2639,8 @@ class SwaggerTest(object):
 
         op = data["paths"]["/model-as-dict/"]["post"]
         assert op["requestBody"]["required"] is True
+        assert "name" not in op["requestBody"]
+        assert "in" not in op["requestBody"]
         assert request_body_schema(op) == {"$ref": "#/components/schemas/Person"}
         assert "description" not in op["requestBody"]
 
