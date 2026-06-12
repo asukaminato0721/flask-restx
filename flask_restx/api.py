@@ -11,6 +11,7 @@ import warnings
 from collections import OrderedDict
 from functools import wraps, partial
 from types import MethodType
+from typing import Callable
 
 from flask import url_for, request, current_app
 from flask import make_response as original_flask_make_response
@@ -439,7 +440,7 @@ class Api(object):
         else:
             raise InternalServerError()
 
-    def documentation(self, func):
+    def documentation[View](self, func: View) -> View:
         """A decorator to specify a view function for the documentation"""
         self._doc_view = func
         return func
@@ -591,11 +592,13 @@ class Api(object):
                 rv[exception] = handler
         return rv
 
-    def errorhandler(self, exception):
+    def errorhandler[Handler](
+        self, exception
+    ) -> Callable[[Handler], Handler] | Handler:
         """A decorator to register an error handler for a given exception"""
         if inspect.isclass(exception) and issubclass(exception, Exception):
             # Register an error handler for a given exception
-            def wrapper(func):
+            def wrapper(func: Handler) -> Handler:
                 self.error_handlers[exception] = func
                 return func
 
@@ -944,7 +947,9 @@ class Api(object):
             )
         ]
 
-    def representation(self, mediatype):
+    def representation[Transformer](
+        self, mediatype
+    ) -> Callable[[Transformer], Transformer]:
         """
         Allows additional representation transformers to be declared for the
         api. Transformers are functions that must be decorated with this
@@ -967,7 +972,7 @@ class Api(object):
                 return resp
         """
 
-        def wrapper(func):
+        def wrapper(func: Transformer) -> Transformer:
             self.representations[mediatype] = func
             return func
 

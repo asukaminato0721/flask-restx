@@ -2,7 +2,7 @@ import inspect
 import warnings
 import logging
 from collections import namedtuple, OrderedDict
-
+from typing import Callable
 from flask import request
 from flask.views import http_method_funcs
 
@@ -52,7 +52,7 @@ class Namespace(object):
         self.models = {}
         self.urls = {}
         self.decorators = decorators if decorators else []
-        self.resources = []  # List[ResourceRoute]
+        self.resources = []
         self.error_handlers = OrderedDict()
         self.default_error_handler = None
         self.authorizations = authorizations
@@ -94,12 +94,14 @@ class Namespace(object):
             ns_urls = api.ns_urls(self, urls)
             api.register_resource(self, resource, *ns_urls, **kwargs)
 
-    def route(self, *urls, **kwargs):
+    def route[ResourceClass](
+        self, *urls, **kwargs
+    ) -> Callable[[ResourceClass], ResourceClass]:
         """
         A decorator to route resources.
         """
 
-        def wrapper(cls):
+        def wrapper(cls: ResourceClass) -> ResourceClass:
             doc = kwargs.pop("doc", None)
             if doc is not None:
                 # build api doc intended only for this route
@@ -126,13 +128,15 @@ class Namespace(object):
                     doc[http_method]["expect"] = [doc[http_method]["expect"]]
         return merge(getattr(cls, "__apidoc__", {}), doc)
 
-    def doc(self, shortcut=None, **kwargs):
+    def doc[Documented](
+        self, shortcut=None, **kwargs
+    ) -> Callable[[Documented], Documented]:
         """A decorator to add some api documentation to the decorated object"""
         if isinstance(shortcut, str):
             kwargs["id"] = shortcut
         show = shortcut if isinstance(shortcut, bool) else True
 
-        def wrapper(documented):
+        def wrapper(documented: Documented) -> Documented:
             documented.__apidoc__ = self._build_doc(
                 documented, kwargs if show else False
             )
@@ -140,7 +144,7 @@ class Namespace(object):
 
         return wrapper
 
-    def hide(self, func):
+    def hide[Documented](self, func: Documented) -> Documented:
         """A decorator to hide a resource or a method from specifications"""
         return self.doc(False)(func)
 
@@ -216,7 +220,9 @@ class Namespace(object):
         model = Model.inherit(name, *specs)
         return self.add_model(name, model)
 
-    def expect(self, *inputs, **kwargs):
+    def expect[Documented](
+        self, *inputs, **kwargs
+    ) -> Callable[[Documented], Documented]:
         """
         A decorator to Specify the expected input model
 
@@ -234,14 +240,14 @@ class Namespace(object):
         """Instanciate a :class:`~RequestParser`"""
         return RequestParser()
 
-    def as_list(self, field):
+    def as_list[Field](self, field: Field) -> Field:
         """Allow to specify nested lists for documentation"""
         field.__apidoc__ = merge(getattr(field, "__apidoc__", {}), {"as_list": True})
         return field
 
-    def marshal_with(
+    def marshal_with[**P, R](
         self, fields, as_list=False, code=HTTPStatus.OK, description=None, **kwargs
-    ):
+    ) -> Callable[[Callable[P, R]], Callable[P, R]]:
         """
         A decorator specifying the fields to use for serialization.
 
@@ -250,7 +256,7 @@ class Namespace(object):
 
         """
 
-        def wrapper(func):
+        def wrapper(func: Callable[P, R]) -> Callable[P, R]:
             doc = {
                 "responses": {
                     str(code): (
@@ -268,7 +274,9 @@ class Namespace(object):
 
         return wrapper
 
-    def marshal_list_with(self, fields, **kwargs):
+    def marshal_list_with[**P, R](
+        self, fields, **kwargs
+    ) -> Callable[[Callable[P, R]], Callable[P, R]]:
         """A shortcut decorator for :meth:`~Api.marshal_with` with ``as_list=True``"""
         return self.marshal_with(fields, True, **kwargs)
 
@@ -276,11 +284,13 @@ class Namespace(object):
         """A shortcut to the :func:`marshal` helper"""
         return marshal(*args, **kwargs)
 
-    def errorhandler(self, exception):
+    def errorhandler[Handler](
+        self, exception
+    ) -> Callable[[Handler], Handler] | Handler:
         """A decorator to register an error handler for a given exception"""
         if inspect.isclass(exception) and issubclass(exception, Exception):
             # Register an error handler for a given exception
-            def wrapper(func):
+            def wrapper(func: Handler) -> Handler:
                 self.error_handlers[exception] = func
                 return func
 
@@ -290,7 +300,9 @@ class Namespace(object):
             self.default_error_handler = exception
             return exception
 
-    def param(self, name, description=None, _in="query", **kwargs):
+    def param[Documented](
+        self, name, description=None, _in="query", **kwargs
+    ) -> Callable[[Documented], Documented]:
         """
         A decorator to specify one of the expected parameters
 
@@ -303,7 +315,9 @@ class Namespace(object):
         param["description"] = description
         return self.doc(params={name: param})
 
-    def response(self, code, description, model=None, **kwargs):
+    def response[Documented](
+        self, code, description, model=None, **kwargs
+    ) -> Callable[[Documented], Documented]:
         """
         A decorator to specify one of the expected responses
 
@@ -314,7 +328,9 @@ class Namespace(object):
         """
         return self.doc(responses={str(code): (description, model, kwargs)})
 
-    def header(self, name, description=None, **kwargs):
+    def header[Documented](
+        self, name, description=None, **kwargs
+    ) -> Callable[[Documented], Documented]:
         """
         A decorator to specify one of the expected headers
 
@@ -326,15 +342,17 @@ class Namespace(object):
         header.update(kwargs)
         return self.doc(headers={name: header})
 
-    def produces(self, mimetypes):
+    def produces[Documented](self, mimetypes) -> Callable[[Documented], Documented]:
         """A decorator to specify the MIME types the API can produce"""
         return self.doc(produces=mimetypes)
 
-    def deprecated(self, func):
+    def deprecated[Documented](self, func: Documented) -> Documented:
         """A decorator to mark a resource or a method as deprecated"""
         return self.doc(deprecated=True)(func)
 
-    def vendor(self, *args, **kwargs):
+    def vendor[Documented](
+        self, *args, **kwargs
+    ) -> Callable[[Documented], Documented]:
         """
         A decorator to expose vendor extensions.
 
